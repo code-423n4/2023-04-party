@@ -1,0 +1,35 @@
+{
+  "name": "party-protocol",
+  "description": "Party Protocol is an open protocol for on-chain group coordination.",
+  "author": "Lawrence Forman <me@merklejerk.com>",
+  "license": "GPL-3.0",
+  "scripts": {
+    "clean": "rm -rf out/ js/",
+    "lint": "npx prettier --write .",
+    "build": "forge build --extra-output storageLayout",
+    "test": "forge test",
+    "test:gas": "yarn test --gas-report"
+  },
+  "devDependencies": {
+    "@ganache/console.log": "^0.2.0",
+    "@trufflesuite/uws-js-unofficial": "^20.10.0-unofficial.1",
+    "@types/chai": "^4.3.1",
+    "@types/mocha": "^9.1.1",
+    "@types/sinon-chai": "^3.2.8",
+    "@types/yargs": "^17.0.10",
+    "chai": "^4.3.6",
+    "ethereum-waffle": "4.0.6",
+    "ganache": "^7.5.0",
+    "mocha": "^10.0.0",
+    "prettier": "^2.7.1",
+    "prettier-plugin-solidity": "^1.0.0-rc.1",
+    "source-map-support": "^0.5.21",
+    "typescript": "^4.6.4"
+  },
+  "dependencies": {
+    "colors": "^1.4.0",
+    "glob": "^7.1.6",
+    "glob-promise": "^4.2.2",
+    "yargs": "^17.5.1"
+  }
+}
