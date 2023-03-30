@@ -1,59 +1,32 @@
-# ✨ So you want to sponsor a contest
+# Party DAO
 
-This `README.md` contains a set of checklists for our contest collaboration.
+## Overview
 
-Your contest will use two repos: 
-- **a _contest_ repo** (this one), which is used for scoping your contest and for providing information to contestants (wardens)
-- **a _findings_ repo**, where issues are submitted (shared with you after the contest) 
+Party Protocol aims to be a standard for group coordination, providing on-chain functionality for essential group behaviors:
 
-Ultimately, when we launch the contest, this contest repo will be made public and will contain the smart contracts to be reviewed and all the information needed for contest participants. The findings repo will be made public after the contest report is published and your team has mitigated the identified issues.
+1. **Formation:** Assembling a group and combining resources.
 
-Some of the checklists in this doc are for **C4 (🐺)** and some of them are for **you as the contest sponsor (⭐️)**.
+1. **Coordination:** Making decisions and taking action together.
 
----
+1. **Distribution:** Sharing resources with group members.
 
-# Contest setup
+Rather than pursuing a generic approach to start, we released the first version of the Party Protocol with a focus on NFTs, largely inspired by our initial work on PartyBid. This next release will expand the protocol past that, introducing the new concept of parties that can hold and use ETH.
 
-# Repo setup
+Unlike previous version of parties, the initial crowdfund to raise ETH is created at the same time as the party. With this new crowdfund, users are minted a party card upon contributing instead of having to wait until the party is won like with past crowdfunds. Governance is activated once the crowdfund is won, and the party can vote on what to do with the raised funds.
 
-## ⭐️ Sponsor: Add code to this repo
+Additional key new feature and updates include:
 
-- [ ] Create a PR to this repo with the below changes:
-- [ ] Provide a self-contained repository with working commands that will build (at least) all in-scope contracts, and commands that will run tests producing gas reports for the relevant contracts.
-- [ ] Make sure your code is thoroughly commented using the [NatSpec format](https://docs.soliditylang.org/en/v0.5.10/natspec-format.html#natspec-format).
-- [ ] Please have final versions of contracts and documentation added/updated in this repo **no less than 24 hours prior to contest start time.**
-- [ ] Be prepared for a 🚨code freeze🚨 for the duration of the contest — important because it establishes a level playing field. We want to ensure everyone's looking at the same code, no matter when they look during the contest. (Note: this includes your own repo, since a PR can leak alpha to our wardens!)
+- Introduction of a new class of "operator" contracts, which are standalone contracts designed to execute specific actions on behalf of the party, possibly using resources sent to it by the party to complete the action. This starts with the addition of a new CollectionBatchBuyOperator that enables parties to buy NFTs.
+- A new crowdfund type allows parties to re-raise funds, and a new proposal type enables parties to vote to perform a re-raise.
+- Proposal execution engine that is now configurable. This was partly due to the necessity of enabling new parties with additional features while maintaining the same security guarantees for old parties. The update includes the addition of boolean flags set upon party initialization, providing more flexibility and control over party functionality.
 
+## Contest Details
 
----
-
-## ⭐️ Sponsor: Edit this README
-
-Under "SPONSORS ADD INFO HERE" heading below, include the following:
-
-- [ ] Modify the bottom of this `README.md` file to describe how your code is supposed to work with links to any relevent documentation and any other criteria/details that the C4 Wardens should keep in mind when reviewing. ([Here's a well-constructed example.](https://github.com/code-423n4/2022-08-foundation#readme))
-  - [ ] When linking, please provide all links as full absolute links versus relative links
-  - [ ] All information should be provided in markdown format (HTML does not render on Code4rena.com)
-- [ ] Under the "Scope" heading, provide the name of each contract and:
-  - [ ] source lines of code (excluding blank lines and comments) in each
-  - [ ] external contracts called in each
-  - [ ] libraries used in each
-- [ ] Describe any novel or unique curve logic or mathematical models implemented in the contracts
-- [ ] Does the token conform to the ERC-20 standard? In what specific ways does it differ?
-- [ ] Describe anything else that adds any special logic that makes your approach unique
-- [ ] Identify any areas of specific concern in reviewing the code
-- [ ] Optional / nice to have: pre-record a high-level overview of your protocol (not just specific smart contract functions). This saves wardens a lot of time wading through documentation.
-- [ ] See also: [this checklist in Notion](https://code4rena.notion.site/Key-info-for-Code4rena-sponsors-f60764c4c4574bbf8e7a6dbd72cc49b4#0cafa01e6201462e9f78677a39e09746)
-- [ ] Delete this checklist and all text above the line below when you're ready.
-
----
-
-# Party DAO - Versus contest details
-- Total Prize Pool: $56,500 USDC 
-  - HM awards: $37,400 USDC 
-  - QA report awards: $4,400 USDC 
-  - Gas report awards: $2,200 USDC 
-  - Judge awards: $12,000 USDC 
+- Total Prize Pool: $56,500 USDC
+  - HM awards: $37,400 USDC
+  - QA report awards: $4,400 USDC
+  - Gas report awards: $2,200 USDC
+  - Judge awards: $12,000 USDC
   - Scout awards: $500 USDC
 - Join [C4 Discord](https://discord.gg/code4rena) to register
 - Submit findings [using the C4 form](https://code4rena.com/contests/2023-04-party-contest/submit)
@@ -61,44 +34,13 @@ Under "SPONSORS ADD INFO HERE" heading below, include the following:
 - Starts April 3, 2023 20:00 UTC
 - Ends April 14, 2023 20:00 UTC
 
-## Automated Findings / Publicly Known Issues
+## Scoping Details
 
-Automated findings output for the contest can be found [here](add link to report) within an hour of contest opening.
-
-*Note for C4 wardens: Anything included in the automated findings output is considered a publicly known issue and is ineligible for awards.*
-
-[ ⭐️ SPONSORS ADD INFO HERE ]
-
-# Overview
-
-*Please provide some context about the code being audited, and identify any areas of specific concern in reviewing the code. (This is a good place to link to your docs, if you have them.)*
-
-# Scope
-
-*List all files in scope in the table below (along with hyperlinks) -- and feel free to add notes here to emphasize areas of focus.*
-
-*For line of code counts, we recommend using [cloc](https://github.com/AlDanial/cloc).* 
-
-| Contract | SLOC | Purpose | Libraries used |  
-| ----------- | ----------- | ----------- | ----------- |
-| [contracts/folder/sample.sol](contracts/folder/sample.sol) | 123 | This contract does XYZ | [`@openzeppelin/*`](https://openzeppelin.com/contracts/) |
-
-## Out of scope
-
-*List any files/contracts that are out of scope for this audit.*
-
-# Additional Context
-
-*Describe any novel or unique curve logic or mathematical models implemented in the contracts*
-
-*Sponsor, please confirm/edit the information below.*
-
-## Scoping Details 
 ```
 - If you have a public code repo, please share it here: There's a private internal PR covering the new features, but the protocol is here: https://github.com/PartyDAO/party-protocol
-- How many contracts are in scope?:   10
-- Total SLoC for these contracts?:  1964
-- How many external imports are there?: 2 
+- How many contracts are in scope?:   14
+- Total SLoC for these contracts?:  2570
+- How many external imports are there?: 2
 - How many separate interfaces and struct definitions are there for the contracts within scope?:  23
 - Does most of your code generally use composition or inheritance?:   inheritance
 - How many external calls?:   1
@@ -107,18 +49,48 @@ Automated findings output for the contest can be found [here](add link to report
 - Please describe required context:   While there are new features under scope, most of focus in this contest will be on code refactored on an existing protocol to allow the new features added  to work (e.g. ability to crowdfund ETH for parties and reraise). Although not all aspects of the protocol were refactored, an understanding of the protocol's purpose as a whole and the reasoning behind specific functionality will be helpful. This context is well-explained in our documentation.
 - Does it use an oracle?:  No
 - Does the token conform to the ERC20 standard?:  No
-- Are there any novel or unique curve logic or mathematical models?: 
-- Does it use a timelock function?:  
+- Are there any novel or unique curve logic or mathematical models?:
+- Does it use a timelock function?:
 - Is it an NFT?: true
-- Does it have an AMM?: false  
-- Is it a fork of a popular project?:  false 
-- Does it use rollups?:   
-- Is it multi-chain?:  
+- Does it have an AMM?: false
+- Is it a fork of a popular project?:  false
+- Does it use rollups?: false
+- Is it multi-chain?: false
 - Does it use a side-chain?: false
 ```
 
-# Tests
+## Scope
 
-*Provide every step required to build the project from a fresh git clone, as well as steps to run the tests with a gas report.* 
+| Contract                                                                                                 | SLOC | Purpose                                                                                                | Libraries used                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [contracts/party/PartyGovernance.sol](contracts/party/PartyGovernance.sol)                               | 725  | Handles the governance of a party, including configuration options                                     | [contracts/utils/ReadOnlyDelegateCall.sol](contracts/utils/ReadOnlyDelegateCall.sol), [contracts/utils/LibERC20Compat.sol](contracts/utils/LibERC20Compat.sol), [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol), [contracts/utils/LibSafeCast.sol](contracts/utils/LibSafeCast.sol)         |
+| [contracts/crowdfund/InitialETHCrowdfund.sol](contracts/crowdfund/InitialETHCrowdfund.sol)               | 274  | Crowdfund contract to raise initial funds for new ETH parties                                          | [contracts/utils/LibAddress.sol](contracts/utils/LibAddress.sol), [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol), [contracts/utils/LibSafeCast.sol](contracts/utils/LibSafeCast.sol)                                                                                                       |
+| [contracts/crowdfund/ReraiseETHCrowdfund.sol](contracts/crowdfund/ReraiseETHCrowdfund.sol)               | 273  | Crowdfund contract to re-raise funds for existing ETH parties                                          | [contracts/utils/LibAddress.sol](contracts/utils/LibAddress.sol), [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol), [contracts/utils/LibSafeCast.sol](contracts/utils/LibSafeCast.sol)                                                                                                       |
+| [contracts/proposals/ProposalExecutionEngine.sol](contracts/proposals/ProposalExecutionEngine.sol)       | 215  | Executes proposals and handles proposal logic                                                          | [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol)                                                                                                                                                                                                                                             |
+| [contracts/proposals/ArbitraryCallsProposal.sol](contracts/proposals/ArbitraryCallsProposal.sol)         | 199  | Handles arbitrary calls proposals, allowing spending of party's ETH if configured                      | [contracts/utils/LibSafeERC721.sol](contracts/utils/LibSafeERC721.sol), [contracts/utils/LibAddress.sol](contracts/utils/LibAddress.sol)                                                                                                                                                                         |
+| [contracts/crowdfund/ETHCrowdfundBase.sol](contracts/crowdfund/ETHCrowdfundBase.sol)                     | 189  | Base contract for ETH crowdfunds, inherited by `InitialETHCrowdfund` and `ReraiseETHCrowdfund`         | [contracts/utils/LibAddress.sol](contracts/utils/LibAddress.sol), [contracts/utils/LibSafeCast.sol](contracts/utils/LibSafeCast.sol)                                                                                                                                                                             |
+| [contracts/party/PartyGovernanceNFT.sol](contracts/party/PartyGovernanceNFT.sol)                         | 188  | Handles the governance of a party's NFTs, allows multiple authorities, and supports new ETH crowdfunds | [openzeppelin/contracts/interfaces/IERC2981.sol](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/interfaces/IERC2981.sol), [contracts/utils/ReadOnlyDelegateCall.sol](contracts/utils/ReadOnlyDelegateCall.sol), [contracts/utils/LibSafeCast.sol](contracts/utils/LibSafeCast.sol) |
+| [contracts/crowdfund/CrowdfundFactory.sol](contracts/crowdfund/CrowdfundFactory.sol)                     | 177  | Factory contract for creating new ETH crowdfunds and allowing custom implementation addresses          | [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol)                                                                                                                                                                                                                                             |
+| [contracts/operators/CollectionBatchBuyOperator.sol](contracts/operators/CollectionBatchBuyOperator.sol) | 144  | Operator contract allowing parties to buy NFTs through proposals                                       | [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol), [contracts/utils/LibAddress.sol](contracts/utils/LibAddress.sol), [contracts/utils/LibSafeERC721.sol](contracts/utils/LibSafeERC721.sol)                                                                                                   |
+| [contracts/proposals/VetoProposal.sol](contracts/proposals/VetoProposal.sol)                             | 45   | Handles proposals to veto other proposals                                                              | -                                                                                                                                                                                                                                                                                                                |
+| [contracts/proposals/OperatorProposal.sol](contracts/proposals/OperatorProposal.sol)                     | 39   | Handles proposals to add/remove operators                                                              | -                                                                                                                                                                                                                                                                                                                |
+| [contracts/party/PartyFactory.sol](contracts/party/PartyFactory.sol)                                     | 37   | Factory contract for creating new parties                                                              | -                                                                                                                                                                                                                                                                                                                |
+| [contracts/proposals/AddAuthorityProposal.sol](contracts/proposals/AddAuthorityProposal.sol)             | 35   | Handles proposals to add authorities to a party's NFT                                                  | [contracts/utils/LibRawResult.sol](contracts/utils/LibRawResult.sol)                                                                                                                                                                                                                                             |
+| [contracts/proposals/DistributeProposal.sol](contracts/proposals/DistributeProposal.sol)                 | 30   | Handles distribution proposals, allowing party members to claim their share of the party's assets      | -                                                                                                                                                                                                                                                                                                                |
+| Total (over 14 files):                                                                                   | 2570 |                                                                                                        |                                                                                                                                                                                                                                                                                                                  |
 
-*Note: Many wardens run Slither as a first pass for testing.  Please document any known errors with no workaround.* 
+## All-in-one Command
+
+Here's an example one-liner to immediately get started with the codebase. It will clone the project, build it, run every test, and display gas reports:
+
+```bash
+export ETH_RPC_URL='<your_alchemy_mainnet_url_here>' && git clone https://github.com/code-423n4/2022-09-party && cd 2022-09-party && foundryup && forge install && yarn install && forge test -f $ETH_RPC_URL --gas-report
+```
+
+## Slither Issue
+
+Note that slither does not seem to be working with the repo as-is 🤷, resulting in an enum type not found error:
+
+```
+slither.solc_parsing.exceptions.ParsingError: Type not found enum Crowdfund.CrowdfundLifecycle
+```
