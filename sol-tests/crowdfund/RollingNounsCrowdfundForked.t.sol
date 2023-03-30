@@ -3,6 +3,7 @@ pragma solidity ^0.8;
 
 import "./RollingAuctionCrowdfund.t.sol";
 import "contracts/vendor/markets/INounsAuctionHouse.sol";
+import "contracts/renderers/RendererStorage.sol";
 
 contract RollingNounsCrowdfundForkedTest is RollingAuctionCrowdfundTest {
     INounsAuctionHouse nounsAuctionHouse;
@@ -16,6 +17,10 @@ contract RollingNounsCrowdfundForkedTest is RollingAuctionCrowdfundTest {
         globals = new Globals(address(this));
         partyFactory = new MockPartyFactory();
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         rollingAuctionCrowdfundImpl = new RollingAuctionCrowdfund(globals);
         market = IMarketWrapper(0x9319DAd8736D752C5c72DB229f8e1b280DC80ab1);
         nounsAuctionHouse = INounsAuctionHouse(0x830BD73E4184ceF73443C15111a1DF14e495C706);
@@ -24,6 +29,7 @@ contract RollingNounsCrowdfundForkedTest is RollingAuctionCrowdfundTest {
 
         // Set host
         govOpts.hosts = _toAddressArray(address(this));
+        govOpts.partyFactory = partyFactory;
 
         // Create crowdfund
         crowdfund = RollingAuctionCrowdfund(
@@ -33,28 +39,31 @@ contract RollingNounsCrowdfundForkedTest is RollingAuctionCrowdfundTest {
                         rollingAuctionCrowdfundImpl,
                         abi.encodeCall(
                             RollingAuctionCrowdfund.initialize,
-                            RollingAuctionCrowdfund.RollingAuctionCrowdfundOptions({
-                                name: "Crowfund",
-                                symbol: "CF",
-                                customizationPresetId: 0,
-                                auctionId: auctionId,
-                                market: market,
-                                nftContract: nftContract,
-                                nftTokenId: tokenId,
-                                duration: 7 days,
-                                maximumBid: type(uint96).max,
-                                splitRecipient: payable(address(0)),
-                                splitBps: 0,
-                                initialContributor: address(this),
-                                initialDelegate: address(this),
-                                minContribution: 0,
-                                maxContribution: type(uint96).max,
-                                gateKeeper: IGateKeeper(address(0)),
-                                gateKeeperId: 0,
-                                onlyHostCanBid: false,
-                                allowedAuctionsMerkleRoot: bytes32(0),
-                                governanceOpts: govOpts
-                            })
+                            (
+                                AuctionCrowdfundBase.AuctionCrowdfundOptions({
+                                    name: "Crowfund",
+                                    symbol: "CF",
+                                    customizationPresetId: 0,
+                                    auctionId: auctionId,
+                                    market: market,
+                                    nftContract: nftContract,
+                                    nftTokenId: tokenId,
+                                    duration: 7 days,
+                                    maximumBid: type(uint96).max,
+                                    splitRecipient: payable(address(0)),
+                                    splitBps: 0,
+                                    initialContributor: address(this),
+                                    initialDelegate: address(this),
+                                    minContribution: 0,
+                                    maxContribution: type(uint96).max,
+                                    gateKeeper: IGateKeeper(address(0)),
+                                    gateKeeperId: 0,
+                                    onlyHostCanBid: false,
+                                    governanceOpts: govOpts,
+                                    proposalEngineOpts: proposalEngineOpts
+                                }),
+                                bytes32(0)
+                            )
                         )
                     )
                 )

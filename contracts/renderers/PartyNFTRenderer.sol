@@ -6,7 +6,6 @@ import "../utils/vendor/Strings.sol";
 import "../utils/vendor/Base64.sol";
 
 import "./RendererBase.sol";
-import "./MetadataRegistry.sol";
 import "../party/PartyGovernance.sol";
 import "../party/PartyGovernanceNFT.sol";
 import "../distribution/TokenDistributor.sol";
@@ -40,51 +39,6 @@ contract PartyNFTRenderer is RendererBase {
     }
 
     function contractURI() external view override returns (string memory) {
-        // Check if party has a custom token URI set.
-        {
-            MetadataRegistry metadataRegistry = MetadataRegistry(
-                _GLOBALS.getAddress(LibGlobals.GLOBAL_METADATA_REGISTRY)
-            );
-
-            (
-                string memory customName,
-                string memory customDescription,
-                string memory customImage,
-                string memory customBanner
-            ) = metadataRegistry.customPartyCollectionMetadataByCrowdfund(
-                    // Get the crowdfund that created this party.
-                    Crowdfund(PartyGovernanceNFT(address(this)).mintAuthority())
-                );
-
-            // If the party has a custom token URI set, return it.
-            if (
-                bytes(customName).length > 0 &&
-                bytes(customDescription).length > 0 &&
-                bytes(customImage).length > 0 &&
-                bytes(customBanner).length > 0
-            ) {
-                return
-                    string.concat(
-                        "data:application/json;base64,",
-                        Base64.encode(
-                            abi.encodePacked(
-                                '{"name":"',
-                                customName,
-                                '", "description":"',
-                                customDescription,
-                                '", "external_url":"',
-                                generateExternalURL(),
-                                '", "image":"',
-                                customImage,
-                                '", "banner":"',
-                                customBanner,
-                                '"}'
-                            )
-                        )
-                    );
-            }
-        }
-
         (bool isDarkMode, Color color) = getCustomizationChoices();
         (string memory image, string memory banner) = getCollectionImageAndBanner(
             color,
@@ -115,46 +69,6 @@ contract PartyNFTRenderer is RendererBase {
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         if (PartyGovernance(address(this)).ownerOf(tokenId) == address(0)) {
             revert InvalidTokenIdError();
-        }
-
-        // Check if party has a custom token URI set.
-        {
-            MetadataRegistry metadataRegistry = MetadataRegistry(
-                _GLOBALS.getAddress(LibGlobals.GLOBAL_METADATA_REGISTRY)
-            );
-
-            (string memory customName, string memory customDescription, string memory customImage) = metadataRegistry
-                .customPartyMetadataByCrowdfund(
-                    // Get the crowdfund that created this party.
-                    Crowdfund(PartyGovernanceNFT(address(this)).mintAuthority())
-                );
-
-            // If the party has a custom token URI set, return it.
-            if (
-                bytes(customName).length > 0 &&
-                bytes(customDescription).length > 0 &&
-                bytes(customImage).length > 0
-            ) {
-                return
-                    string.concat(
-                        "data:application/json;base64,",
-                        Base64.encode(
-                            abi.encodePacked(
-                                '{"name":"',
-                                string.concat(customName, " #", tokenId.toString()),
-                                '", "description":"',
-                                customDescription,
-                                '", "external_url":"',
-                                generateExternalURL(),
-                                '", "attributes": [',
-                                generateAttributes(tokenId),
-                                '], "image":"',
-                                customImage,
-                                '"}'
-                            )
-                        )
-                    );
-            }
         }
 
         // Get the customization data for this crowdfund.

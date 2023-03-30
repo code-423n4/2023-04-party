@@ -4,6 +4,7 @@ pragma solidity ^0.8;
 import "forge-std/Test.sol";
 
 import "../../contracts/crowdfund/CollectionBatchBuyCrowdfund.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
@@ -18,7 +19,7 @@ import "./TestERC721Vault.sol";
 contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
@@ -30,16 +31,23 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
 
     uint96 maximumPrice = 100e18;
     Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     constructor() {
         globals = new Globals(address(this));
         MockPartyFactory partyFactory = new MockPartyFactory();
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         party = partyFactory.mockParty();
 
         nftContract = new DummyERC721();
 
         govOpts.hosts.push(address(this));
+        govOpts.partyImpl = Party(payable(address(party)));
+        govOpts.partyFactory = partyFactory;
     }
 
     function _createCrowdfund(
@@ -68,7 +76,8 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: IGateKeeper(address(0)),
                                 gateKeeperId: 0,
-                                governanceOpts: govOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -116,7 +125,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             Party.PartyOptions({
                 name: "Crowdfund",
                 symbol: "CF",
@@ -129,7 +138,8 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                     totalVotingPower: 3,
                     feeBps: govOpts.feeBps,
                     feeRecipient: govOpts.feeRecipient
-                })
+                }),
+                proposalEngine: proposalEngineOpts
             }),
             tokens,
             tokenIds
@@ -144,6 +154,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -191,6 +202,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length + 1,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -233,6 +245,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 4,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -275,7 +288,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             Party.PartyOptions({
                 name: "Crowdfund",
                 symbol: "CF",
@@ -288,7 +301,8 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                     totalVotingPower: 2,
                     feeBps: govOpts.feeBps,
                     feeRecipient: govOpts.feeRecipient
-                })
+                }),
+                proposalEngine: proposalEngineOpts
             }),
             expectedTokens,
             expectedTokenIds
@@ -304,6 +318,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length - 1,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -335,6 +350,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: 0,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -361,6 +377,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: 1,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -394,6 +411,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -426,6 +444,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -459,6 +478,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: 1,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -492,6 +512,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -519,6 +540,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -547,6 +569,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -584,6 +607,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );
@@ -623,6 +647,7 @@ contract CollectionBatchBuyCrowdfundTest is Test, TestUtils {
                 minTokensBought: tokenIds.length,
                 minTotalEthUsed: 0,
                 governanceOpts: govOpts,
+                proposalEngineOpts: proposalEngineOpts,
                 hostIndex: 0
             })
         );

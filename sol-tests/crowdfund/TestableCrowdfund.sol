@@ -36,21 +36,23 @@ contract TestableCrowdfund is Crowdfund {
 
     function testCreateParty(
         FixedGovernanceOpts memory govOpts_,
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds
     ) external returns (Party party) {
-        return _createParty(govOpts_, false, preciousTokens, preciousTokenIds);
+        return _createParty(govOpts_, proposalEngineOpts, false, preciousTokens, preciousTokenIds);
     }
 
     function testSetWon(
         uint256 finalPrice_,
         FixedGovernanceOpts memory govOpts_,
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds
     ) external returns (Party party) {
         finalPrice = finalPrice_;
         lifeCycle = CrowdfundLifecycle.Won;
-        return _createParty(govOpts_, false, preciousTokens, preciousTokenIds);
+        return _createParty(govOpts_, proposalEngineOpts, false, preciousTokens, preciousTokenIds);
     }
 
     function getCrowdfundLifecycle() public view virtual override returns (CrowdfundLifecycle) {
@@ -61,9 +63,10 @@ contract TestableCrowdfund is Crowdfund {
         return finalPrice;
     }
 
-    function hashFixedGovernanceOpts(
-        FixedGovernanceOpts memory opts
+    function hashOpts(
+        FixedGovernanceOpts memory _govOpts,
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts
     ) public pure returns (bytes32 h) {
-        return _hashFixedGovernanceOpts(opts);
+        return _hashOpts(_govOpts, proposalEngineOpts);
     }
 }

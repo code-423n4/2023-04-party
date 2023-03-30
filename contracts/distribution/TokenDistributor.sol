@@ -334,7 +334,7 @@ contract TokenDistributor is ITokenDistributor {
         uint256 storedBalance = _storedBalances[balanceId] - amount;
         // Temporarily set to max as a reentrancy guard. An interesing attack
         // could occur if we didn't do this where an attacker could `claim()` and
-        // reenter upon transfer (eg. in the `tokensToSend` hook of an ERC777) to
+        // reenter upon transfer (e.g. in the `tokensToSend` hook of an ERC777) to
         // `createERC20Distribution()`. Since the `balanceOf(address(this))`
         // would not of been updated yet, the supply would be miscalculated and
         // the attacker would create a distribution that essentially steals from

@@ -8,6 +8,7 @@ import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
 import "../../contracts/gatekeepers/AllowListGateKeeper.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 
 import "../DummyERC721.sol";
 import "../TestUtils.sol";
@@ -18,7 +19,7 @@ import "./TestERC721Vault.sol";
 contract BuyCrowdfundTest is Test, TestUtils {
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
@@ -50,7 +51,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
     address defaultInitialDelegate;
     IGateKeeper defaultGateKeeper;
     bytes12 defaultGateKeeperId;
-    Crowdfund.FixedGovernanceOpts defaultGovernanceOpts;
+    Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     Globals globals = new Globals(address(this));
     MockPartyFactory partyFactory = new MockPartyFactory();
@@ -60,8 +62,15 @@ contract BuyCrowdfundTest is Test, TestUtils {
 
     constructor() {
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         party = partyFactory.mockParty();
         buyCrowdfundImpl = new BuyCrowdfund(globals);
+
+        govOpts.partyImpl = Party(payable(address(party)));
+        govOpts.partyFactory = partyFactory;
     }
 
     function setUp() public {}
@@ -74,7 +83,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
         bytes12 gateKeeperId,
         address[] memory hosts
     ) private returns (BuyCrowdfund cf) {
-        defaultGovernanceOpts.hosts = hosts;
+        govOpts.hosts = hosts;
         cf = BuyCrowdfund(
             payable(
                 address(
@@ -99,7 +108,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
                                 gateKeeper: gateKeeper,
                                 gateKeeperId: gateKeeperId,
                                 onlyHostCanBuy: onlyHostCanBuy,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -119,27 +129,29 @@ contract BuyCrowdfundTest is Test, TestUtils {
                 false,
                 defaultGateKeeper,
                 defaultGateKeeperId,
-                defaultGovernanceOpts.hosts
+                govOpts.hosts
             );
     }
 
     function _createExpectedPartyOptions(
         uint256 finalPrice
     ) private view returns (Party.PartyOptions memory opts) {
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts;
         return
             Party.PartyOptions({
                 name: defaultName,
                 symbol: defaultSymbol,
                 customizationPresetId: 0,
                 governance: PartyGovernance.GovernanceOpts({
-                    hosts: defaultGovernanceOpts.hosts,
-                    voteDuration: defaultGovernanceOpts.voteDuration,
-                    executionDelay: defaultGovernanceOpts.executionDelay,
-                    passThresholdBps: defaultGovernanceOpts.passThresholdBps,
+                    hosts: govOpts.hosts,
+                    voteDuration: govOpts.voteDuration,
+                    executionDelay: govOpts.executionDelay,
+                    passThresholdBps: govOpts.passThresholdBps,
                     totalVotingPower: uint96(finalPrice),
-                    feeBps: defaultGovernanceOpts.feeBps,
-                    feeRecipient: defaultGovernanceOpts.feeRecipient
-                })
+                    feeBps: govOpts.feeBps,
+                    feeRecipient: govOpts.feeRecipient
+                }),
+                proposalEngine: proposalEngineOpts
             });
     }
 
@@ -157,7 +169,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(0.5e18),
             _toERC721Array(erc721Vault.token()),
             _toUint256Array(tokenId)
@@ -166,7 +178,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
             payable(address(erc721Vault)),
             0.5e18,
             abi.encodeCall(erc721Vault.claim, (tokenId)),
-            defaultGovernanceOpts,
+            govOpts,
+            proposalEngineOpts,
             0
         );
         assertEq(address(party), address(party_));
@@ -201,7 +214,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
             _randomAddress(), // Call random EOA, which will succeed but do nothing
             0.5e18,
             "",
-            defaultGovernanceOpts,
+            govOpts,
+            proposalEngineOpts,
             0
         );
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Active);
@@ -230,7 +244,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
 
         // Buy the token and expect revert because we are not a host.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
-        cf.buy(payable(address(0)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(0)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Now as the host, but this will fail with another error because
         // we are trying to call the CF itself in buy().
@@ -238,13 +252,13 @@ contract BuyCrowdfundTest is Test, TestUtils {
         vm.expectRevert(
             abi.encodeWithSelector(BuyCrowdfundBase.CallProhibitedError.selector, address(cf), "")
         );
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Buy as a contributor, but this will fail because only the host can
         // call buy().
         vm.prank(contributor);
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
     }
 
     function testOnlyHostCanBuy_CannotFakeGovernanceOpts() public {
@@ -263,8 +277,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
         // Buy as the host, but pass in wrong governanceOpts.
         vm.prank(host);
         vm.expectRevert(Crowdfund.InvalidGovernanceOptionsError.selector);
-        defaultGovernanceOpts.voteDuration += 1;
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        govOpts.voteDuration += 1;
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
     }
 
     function testOnlyContributorCanBuy() public {
@@ -291,12 +305,12 @@ contract BuyCrowdfundTest is Test, TestUtils {
 
         // Buy the token, expect revert because we are not a contributor or host.
         vm.expectRevert(Crowdfund.OnlyContributorError.selector);
-        cf.buy(payable(address(0)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(0)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Now as the host, but this will fail because the host is not a contributor.
         vm.prank(host);
         vm.expectRevert(Crowdfund.OnlyContributorError.selector);
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Buy as a contributor, but this will fail with another error because
         // we are trying to call the CF itself in buy().
@@ -304,7 +318,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
         vm.expectRevert(
             abi.encodeWithSelector(BuyCrowdfundBase.CallProhibitedError.selector, address(cf), "")
         );
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
     }
 
     function testOnlyHostOrCanBuy_withGatekeeperSet() public {
@@ -331,7 +345,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
 
         // Buy the token, expect revert because we are not a contributor or host.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
-        cf.buy(payable(address(0)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(0)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Now as the host, but this will fail with another error because
         // we are trying to call the CF itself in buy().
@@ -339,12 +353,12 @@ contract BuyCrowdfundTest is Test, TestUtils {
         vm.expectRevert(
             abi.encodeWithSelector(BuyCrowdfundBase.CallProhibitedError.selector, address(cf), "")
         );
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
 
         // Buy as a contributor, but this will fail because onlyHost is on.
         vm.prank(contributor);
         vm.expectRevert(abi.encodeWithSelector(Crowdfund.OnlyPartyHostError.selector));
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
     }
 
     function testOnlyHostOrContributorCanBuy_CannotFakeGovernanceOpts() public {
@@ -366,8 +380,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
         // Buy as the host, but pass in wrong governanceOpts.
         vm.prank(host);
         vm.expectRevert(Crowdfund.InvalidGovernanceOptionsError.selector);
-        defaultGovernanceOpts.voteDuration += 1;
-        cf.buy(payable(address(cf)), 0, "", defaultGovernanceOpts, 0);
+        govOpts.voteDuration += 1;
+        cf.buy(payable(address(cf)), 0, "", govOpts, proposalEngineOpts, 0);
     }
 
     function testBuyCannotExceedTotalContributions() public {
@@ -393,7 +407,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
             payable(address(erc721Vault)),
             totalContributions + 1,
             abi.encodeCall(erc721Vault.claim, (tokenId)),
-            defaultGovernanceOpts,
+            govOpts,
+            proposalEngineOpts,
             0
         );
     }
@@ -416,7 +431,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
                 callData
             )
         );
-        cf.buy(payable(address(cf)), 1e18, callData, defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 1e18, callData, govOpts, proposalEngineOpts, 0);
         ReenteringContract reenteringContract = new ReenteringContract();
         // Attempt reentering back into the crowdfund via a proxy.
         vm.expectRevert(
@@ -429,7 +444,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
             payable(address(reenteringContract)),
             1e18,
             abi.encodeCall(reenteringContract.reenter, (cf)),
-            defaultGovernanceOpts,
+            govOpts,
+            proposalEngineOpts,
             0
         );
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Active);
@@ -453,7 +469,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
                 callData
             )
         );
-        cf.buy(payable(address(cf)), 1e18, callData, defaultGovernanceOpts, 0);
+        cf.buy(payable(address(cf)), 1e18, callData, govOpts, proposalEngineOpts, 0);
         // Attempt calling `setApprovalForAll()`.
         callData = abi.encodeCall(IERC721.setApprovalForAll, (contributor, true));
         IERC721 token = erc721Vault.token();
@@ -464,7 +480,7 @@ contract BuyCrowdfundTest is Test, TestUtils {
                 callData
             )
         );
-        cf.buy(payable(address(token)), 1e18, callData, defaultGovernanceOpts, 0);
+        cf.buy(payable(address(token)), 1e18, callData, govOpts, proposalEngineOpts, 0);
     }
 
     function testGettingNFTForFreeTriggersLostToRefund() public {
@@ -481,7 +497,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
             payable(address(token)),
             0,
             abi.encodeCall(token.mint, (address(cf))),
-            defaultGovernanceOpts,
+            govOpts,
+            proposalEngineOpts,
             0
         );
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Lost);
@@ -532,7 +549,8 @@ contract BuyCrowdfundTest is Test, TestUtils {
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
                                 onlyHostCanBuy: false,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )

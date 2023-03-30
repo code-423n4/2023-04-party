@@ -10,6 +10,12 @@ import "./fonts/IFont.sol";
 import "./IERC721Renderer.sol";
 import "./RendererStorage.sol";
 
+// Interface for `Party` implementations with the `authority` function before it
+// was removed and replaced by `isAuthority`.
+interface PartyWithAuthority {
+    function authority() external view returns (address);
+}
+
 abstract contract RendererBase is IERC721Renderer {
     using Strings for uint256;
     using Strings for string;
@@ -110,9 +116,9 @@ abstract contract RendererBase is IERC721Renderer {
         // Get the customization preset ID chosen by the crowdfund or party instance.
         uint256 presetId = _storage.getPresetFor(address(this));
         if (presetId == 0) {
-            // Preset ID 0 is reserved. It is used to indicates to party instances
+            // Preset ID 0 is reserved. It is used to indicate to party instances
             // to use the same customization preset as the crowdfund.
-            try Party(payable(address(this))).mintAuthority() returns (address crowdfund) {
+            try PartyWithAuthority(payable(address(this))).authority() returns (address crowdfund) {
                 // Should return the crowdfund used to create the party, if the
                 // party was created conventionally. Use the customization
                 // preset chosen during crowdfund initialization.
@@ -122,7 +128,7 @@ abstract contract RendererBase is IERC721Renderer {
                 if (presetId == 0) return (false, Color.DEFAULT);
             } catch {
                 // Fallback to the default customization options. May happen if
-                // called from a non-party contract (eg. a crowdfund contract,
+                // called from a non-party contract (e.g. a crowdfund contract,
                 // although this shouldn't happen).
                 return (false, Color.DEFAULT);
             }
@@ -243,7 +249,7 @@ abstract contract RendererBase is IERC721Renderer {
             return "&lt;0.01";
         } else if (n < oneUnit) {
             // Preserve leading zeros for decimals.
-            // (eg. if 0.01, `n` will "1" so we need to prepend a "0").
+            // (e.g. if 0.01, `n` will "1" so we need to prepend a "0").
             return
                 string.concat("0.", prependNumWithZeros(str, decimals).substring(0, maxChars - 1));
         } else if (n >= 1000 * oneUnit) {

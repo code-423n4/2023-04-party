@@ -51,7 +51,7 @@ contract ListOnZoraProposalIntegrationTest is Test, TestUtils, ZoraTestUtils {
         );
         globalsAdmin.setProposalEng(address(pe));
 
-        partyFactory = new PartyFactory(globals);
+        partyFactory = new PartyFactory();
     }
 
     function testForked_simpleZora() public onlyForked {
@@ -73,6 +73,7 @@ contract ListOnZoraProposalIntegrationTest is Test, TestUtils, ZoraTestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(partyAdmin),
                     host2: address(0),

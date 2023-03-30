@@ -33,7 +33,7 @@ contract BadERC721Receiver {
 contract CrowdfundTest is Test, TestUtils {
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
@@ -62,7 +62,8 @@ contract CrowdfundTest is Test, TestUtils {
     address defaultInitialDelegate;
     IGateKeeper gateKeeper;
     bytes12 gateKeeperId;
-    Crowdfund.FixedGovernanceOpts defaultGovernanceOpts;
+    Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
     address dao;
     EmergencyExecuteTarget emergencyExecuteTarget = new EmergencyExecuteTarget();
 
@@ -74,12 +75,15 @@ contract CrowdfundTest is Test, TestUtils {
     constructor() {
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
         party = partyFactory.mockParty();
-        defaultGovernanceOpts.hosts.push(_randomAddress());
-        defaultGovernanceOpts.hosts.push(_randomAddress());
-        defaultGovernanceOpts.hosts.push(_randomAddress());
-        defaultGovernanceOpts.voteDuration = 1 days;
-        defaultGovernanceOpts.executionDelay = 0.5 days;
-        defaultGovernanceOpts.passThresholdBps = 0.51e4;
+
+        govOpts.partyImpl = Party(payable(address(party)));
+        govOpts.partyFactory = partyFactory;
+        govOpts.hosts.push(_randomAddress());
+        govOpts.hosts.push(_randomAddress());
+        govOpts.hosts.push(_randomAddress());
+        govOpts.voteDuration = 1 days;
+        govOpts.executionDelay = 0.5 days;
+        govOpts.passThresholdBps = 0.51e4;
         dao = _randomAddress();
 
         // Upload font on-chain
@@ -146,7 +150,8 @@ contract CrowdfundTest is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: gateKeeper,
                                 gateKeeperId: gateKeeperId,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -188,9 +193,10 @@ contract CrowdfundTest is Test, TestUtils {
                     executionDelay: govOpts.executionDelay,
                     passThresholdBps: govOpts.passThresholdBps,
                     totalVotingPower: uint96(finalPrice),
-                    feeBps: defaultGovernanceOpts.feeBps,
-                    feeRecipient: defaultGovernanceOpts.feeRecipient
-                })
+                    feeBps: govOpts.feeBps,
+                    feeRecipient: govOpts.feeRecipient
+                }),
+                proposalEngine: proposalEngineOpts
             });
     }
 
@@ -268,12 +274,18 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1e18),
             erc721Tokens,
             erc721TokenIds
         );
-        Party party_ = cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        Party party_ = cf.testSetWon(
+            1e18,
+            govOpts,
+            proposalEngineOpts,
+            erc721Tokens,
+            erc721TokenIds
+        );
         assertEq(address(party_), address(party));
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
@@ -307,12 +319,18 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1.5e18),
             erc721Tokens,
             erc721TokenIds
         );
-        Party party_ = cf.testSetWon(1.5e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        Party party_ = cf.testSetWon(
+            1.5e18,
+            govOpts,
+            proposalEngineOpts,
+            erc721Tokens,
+            erc721TokenIds
+        );
         assertEq(address(party_), address(party));
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
@@ -351,12 +369,12 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1.25e18),
             erc721Tokens,
             erc721TokenIds
         );
-        cf.testSetWon(1.25e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1.25e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
         emit MockMint(address(cf), contributor1, 1e18, delegate1);
@@ -399,12 +417,12 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1.65e18),
             erc721Tokens,
             erc721TokenIds
         );
-        cf.testSetWon(1.65e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1.65e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
         emit MockMint(address(cf), contributor1, 1.15e18, delegate1);
@@ -437,12 +455,12 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 0),
             erc721Tokens,
             erc721TokenIds
         );
-        Party party_ = cf.testSetWon(0, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        Party party_ = cf.testSetWon(0, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         assertEq(address(party_), address(party));
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
@@ -499,7 +517,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         cf.burn(contributor1);
         // They try to burn again.
@@ -527,7 +545,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(0.5e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(0.5e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         cf.burn(contributor1);
         // contributor1 gets back part of their contribution
@@ -609,7 +627,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(3e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(3e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         cf.burn(contributor1);
         // Use batchBurn() to burn both contributor's tokens.
@@ -632,17 +650,17 @@ contract CrowdfundTest is Test, TestUtils {
         unchecked {
             uint256 r = _randomUint256() % 4;
             if (r == 0) {
-                defaultGovernanceOpts.hosts[0] = _randomAddress();
+                govOpts.hosts[0] = _randomAddress();
             } else if (r == 1) {
-                defaultGovernanceOpts.voteDuration += 1;
+                govOpts.voteDuration += 1;
             } else if (r == 2) {
-                defaultGovernanceOpts.executionDelay += 1;
+                govOpts.executionDelay += 1;
             } else if (r == 3) {
-                defaultGovernanceOpts.passThresholdBps += 1;
+                govOpts.passThresholdBps += 1;
             }
         }
         vm.expectRevert(Crowdfund.InvalidGovernanceOptionsError.selector);
-        cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
     }
 
     // Split recipient set but does not contribute.
@@ -663,7 +681,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(0.5e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(0.5e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
         emit MockMint(
@@ -707,7 +725,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(1.25e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1.25e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
         emit MockMint(
@@ -754,7 +772,7 @@ contract CrowdfundTest is Test, TestUtils {
             address(cf),
             2
         );
-        cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        cf.testSetWon(1e18, govOpts, proposalEngineOpts, erc721Tokens, erc721TokenIds);
         // contributor1 burns tokens
         vm.expectEmit(false, false, false, true);
         emit MockMint(
@@ -822,12 +840,18 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1e18),
             erc721Tokens,
             erc721TokenIds
         );
-        Party party_ = cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        Party party_ = cf.testSetWon(
+            1e18,
+            govOpts,
+            proposalEngineOpts,
+            erc721Tokens,
+            erc721TokenIds
+        );
         assertEq(address(party_), address(party));
         // badERC721Receiver burns tokens
         vm.expectEmit(false, false, false, true);
@@ -875,12 +899,18 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(cf, 1e18),
             erc721Tokens,
             erc721TokenIds
         );
-        Party party_ = cf.testSetWon(1e18, defaultGovernanceOpts, erc721Tokens, erc721TokenIds);
+        Party party_ = cf.testSetWon(
+            1e18,
+            govOpts,
+            proposalEngineOpts,
+            erc721Tokens,
+            erc721TokenIds
+        );
         assertEq(address(party_), address(party));
         // badETHReceiver burns tokens
         vm.expectEmit(false, false, false, true);
@@ -938,7 +968,8 @@ contract CrowdfundTest is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: gateKeeper,
                                 gateKeeperId: gateKeeperId,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -1147,10 +1178,10 @@ contract CrowdfundTest is Test, TestUtils {
 
     function test_hostCanDisableEmergencyFunctions() external {
         TestableCrowdfund cf = _createCrowdfund(0);
-        vm.prank(defaultGovernanceOpts.hosts[0]);
+        vm.prank(govOpts.hosts[0]);
         _expectEmit0();
         emit EmergencyExecuteDisabled();
-        cf.disableEmergencyExecute(defaultGovernanceOpts, 0);
+        cf.disableEmergencyExecute(govOpts, proposalEngineOpts, 0);
         assertEq(cf.emergencyExecuteDisabled(), true);
     }
 
@@ -1159,7 +1190,7 @@ contract CrowdfundTest is Test, TestUtils {
         vm.prank(dao);
         _expectEmit0();
         emit EmergencyExecuteDisabled();
-        cf.disableEmergencyExecute(defaultGovernanceOpts, 0);
+        cf.disableEmergencyExecute(govOpts, proposalEngineOpts, 0);
         assertEq(cf.emergencyExecuteDisabled(), true);
     }
 
@@ -1170,13 +1201,13 @@ contract CrowdfundTest is Test, TestUtils {
         vm.expectRevert(
             abi.encodeWithSelector(Crowdfund.OnlyPartyDaoOrHostError.selector, notHost)
         );
-        cf.disableEmergencyExecute(defaultGovernanceOpts, 0);
+        cf.disableEmergencyExecute(govOpts, proposalEngineOpts, 0);
     }
 
     function test_cannotEmergencyExecuteIfDisabled() external {
         TestableCrowdfund cf = _createCrowdfund(0);
-        vm.prank(defaultGovernanceOpts.hosts[0]);
-        cf.disableEmergencyExecute(defaultGovernanceOpts, 0);
+        vm.prank(govOpts.hosts[0]);
+        cf.disableEmergencyExecute(govOpts, proposalEngineOpts, 0);
         vm.expectRevert(
             abi.encodeWithSelector(Crowdfund.OnlyWhenEmergencyActionsAllowedError.selector)
         );
@@ -1186,12 +1217,9 @@ contract CrowdfundTest is Test, TestUtils {
 
     function test_hostCannotEmergencyExecute() external {
         TestableCrowdfund cf = _createCrowdfund(0);
-        vm.prank(defaultGovernanceOpts.hosts[0]);
+        vm.prank(govOpts.hosts[0]);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                Crowdfund.OnlyPartyDaoError.selector,
-                defaultGovernanceOpts.hosts[0]
-            )
+            abi.encodeWithSelector(Crowdfund.OnlyPartyDaoError.selector, govOpts.hosts[0])
         );
         cf.emergencyExecute(address(0), "", 0);
     }

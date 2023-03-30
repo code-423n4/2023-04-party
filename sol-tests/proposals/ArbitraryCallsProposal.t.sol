@@ -14,9 +14,10 @@ contract TestableArbitraryCallsProposal is ArbitraryCallsProposal {
     constructor(IZoraAuctionHouse zora) ArbitraryCallsProposal(zora) {}
 
     function execute(
-        IProposalExecutionEngine.ExecuteProposalParams calldata params
+        IProposalExecutionEngine.ExecuteProposalParams calldata params,
+        bool allowArbCallsToSpendPartyEth
     ) external payable returns (bytes memory nextProgressData) {
-        nextProgressData = _executeArbitraryCalls(params);
+        nextProgressData = _executeArbitraryCalls(params, allowArbCallsToSpendPartyEth);
     }
 
     function approveTokenSpender(address spender, IERC721 token, uint256 tokenId) external {
@@ -132,7 +133,7 @@ contract ArbitraryCallsProposalTest is
             _expectNonIndexedEmit();
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_canExecuteTwoSimpleCalls() external {
@@ -147,7 +148,7 @@ contract ArbitraryCallsProposalTest is
             _expectNonIndexedEmit();
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_canExecuteSimpleCallWithResultCheck() external {
@@ -162,7 +163,7 @@ contract ArbitraryCallsProposalTest is
             _expectNonIndexedEmit();
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_failsIfResultCheckDoesNotPass() external {
@@ -178,7 +179,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].expectedResultHash
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_canExecuteCallWithEth() external {
@@ -198,7 +199,7 @@ contract ArbitraryCallsProposalTest is
             _expectNonIndexedEmit();
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
-        testContract.execute{ value: 1e18 }(prop);
+        testContract.execute{ value: 1e18 }(prop, false);
     }
 
     function test_canExecuteMultipleCallsWithEth() external {
@@ -219,7 +220,7 @@ contract ArbitraryCallsProposalTest is
             _expectNonIndexedEmit();
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
-        testContract.execute{ value: 1.5e18 }(prop);
+        testContract.execute{ value: 1.5e18 }(prop, false);
     }
 
     function test_canExecuteCallWithEth_refundsLeftover() external {
@@ -240,13 +241,13 @@ contract ArbitraryCallsProposalTest is
             emit ArbitraryCallExecuted(prop.proposalId, i, calls.length);
         }
         uint256 balanceBefore = address(this).balance;
-        testContract.execute{ value: 2e18 }(prop);
+        testContract.execute{ value: 2e18 }(prop, false);
         uint256 balanceAfter = address(this).balance;
         // Spent 2 ETH, refunded 1 ETH
         assertEq(balanceBefore - balanceAfter, 1e18);
     }
 
-    function test_cannotConsumeMoreEthThanAttachedWithSingleCall() external {
+    function test_cannotConsumeMoreEthThanAttachedWithSingleCallIfCannotUsePartyETH() external {
         (ArbitraryCallsProposal.ArbitraryCall[] memory calls, ) = _createSimpleCalls(1, false);
         calls[0].value = 1e18;
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
@@ -258,10 +259,10 @@ contract ArbitraryCallsProposalTest is
             )
         );
         // Only submit enough ETH to cover one succeeding call.
-        testContract.execute{ value: calls[0].value - 1 }(prop);
+        testContract.execute{ value: calls[0].value - 1 }(prop, false);
     }
 
-    function test_cannotConsumeMoreEthThanAttachedWithMultipleCalls() external {
+    function test_cannotConsumeMoreEthThanAttachedWithMultipleCallsIfCannotUsePartyETH() external {
         (ArbitraryCallsProposal.ArbitraryCall[] memory calls, ) = _createSimpleCalls(2, false);
         calls[0].value = 1e18;
         calls[1].value = 0.5e18;
@@ -274,7 +275,35 @@ contract ArbitraryCallsProposalTest is
             )
         );
         // Only submit enough ETH to cover one succeeding call.
-        testContract.execute{ value: 1.25e18 }(prop);
+        testContract.execute{ value: 1.25e18 }(prop, false);
+    }
+
+    function test_canUsePartyETHIfEnabled() external {
+        (ArbitraryCallsProposal.ArbitraryCall[] memory calls, ) = _createSimpleCalls(2, false);
+        calls[0].value = 1e18;
+        calls[1].value = 1e18;
+        IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
+        vm.deal(address(testContract), 2e18);
+        assertEq(address(testContract).balance, 2e18);
+        testContract.execute(prop, true);
+        assertEq(address(testContract).balance, 0);
+    }
+
+    function test_cannotUseMoreETHThanPartyBalance() external {
+        (ArbitraryCallsProposal.ArbitraryCall[] memory calls, ) = _createSimpleCalls(3, false);
+        calls[0].value = 1e18;
+        calls[1].value = 1e18;
+        calls[2].value = 1e18;
+        IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
+        vm.deal(address(testContract), 2e18);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ArbitraryCallsProposal.NotEnoughEthAttachedError.selector,
+                1e18,
+                0
+            )
+        );
+        testContract.execute(prop, true);
     }
 
     function test_failsIfPreciousIsLost() external {
@@ -289,7 +318,7 @@ contract ArbitraryCallsProposalTest is
                 preciousTokenId
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_succeedsIfPreciousIsLostThenReturned() external {
@@ -301,7 +330,7 @@ contract ArbitraryCallsProposalTest is
             (address(testContract), preciousToken, preciousTokenId)
         );
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_succeedsIfPreciousIsLostButUnanimous() external {
@@ -310,7 +339,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].data = abi.encodeCall(ArbitraryCallTarget.yoink, (preciousToken, preciousTokenId));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
         prop.flags |= LibProposal.PROPOSAL_FLAG_UNANIMOUS;
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.ownerOf(preciousTokenId), address(target));
     }
 
@@ -324,7 +353,7 @@ contract ArbitraryCallsProposalTest is
             (address(testContract), address(1), tokenId)
         );
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(token.ownerOf(tokenId), address(1));
     }
 
@@ -339,7 +368,7 @@ contract ArbitraryCallsProposalTest is
             (address(testContract), address(1), tokenId)
         );
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(token.ownerOf(tokenId), address(1));
     }
 
@@ -351,7 +380,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].target = payable(address(token));
         calls[0].data = abi.encodeCall(DummyERC721.approve, (address(1), tokenId));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(token.getApproved(tokenId), address(1));
     }
 
@@ -361,7 +390,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].target = payable(address(token));
         calls[0].data = abi.encodeCall(DummyERC721.setApprovalForAll, (address(1), true));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(token.isApprovedForAll(address(testContract), address(1)), true);
     }
 
@@ -378,7 +407,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.isApprovedForAll(address(testContract), address(1)), false);
     }
 
@@ -395,7 +424,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_canCallApproveOnPreciousTokenIfDisabling() external {
@@ -404,7 +433,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].target = payable(address(preciousToken));
         calls[0].data = abi.encodeCall(DummyERC721.approve, (address(0), preciousTokenId));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.getApproved(preciousTokenId), address(0));
     }
 
@@ -414,7 +443,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].target = payable(address(preciousToken));
         calls[0].data = abi.encodeCall(DummyERC721.setApprovalForAll, (address(1), false));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.isApprovedForAll(address(testContract), address(1)), false);
     }
 
@@ -425,7 +454,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].data = abi.encodeCall(DummyERC721.approve, (address(1), preciousTokenId));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
         prop.flags |= LibProposal.PROPOSAL_FLAG_UNANIMOUS;
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.getApproved(preciousTokenId), address(1));
     }
 
@@ -436,7 +465,7 @@ contract ArbitraryCallsProposalTest is
         calls[0].data = abi.encodeCall(DummyERC721.setApprovalForAll, (address(1), true));
         IProposalExecutionEngine.ExecuteProposalParams memory prop = _createTestProposal(calls);
         prop.flags |= LibProposal.PROPOSAL_FLAG_UNANIMOUS;
-        testContract.execute(prop);
+        testContract.execute(prop, false);
         assertEq(preciousToken.isApprovedForAll(address(testContract), address(1)), true);
     }
 
@@ -455,7 +484,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotCallOnERC1155Received() external {
@@ -473,7 +502,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotCallOnERC1155BatchReceived() external {
@@ -491,7 +520,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotCallValidateOnOpensea() external {
@@ -522,7 +551,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotCallCancelAuctionOnZoraIfNotLastCall() external {
@@ -540,7 +569,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_canCallCancelAuctionOnZoraIfLastCall() external {
@@ -555,7 +584,7 @@ contract ArbitraryCallsProposalTest is
         emit ArbitraryCallExecuted(prop.proposalId, 0, 2);
         _expectEmit0();
         emit ArbitraryCallExecuted(prop.proposalId, 1, 2);
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotExecuteShortApproveCallData() external {
@@ -570,7 +599,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data.length
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function test_cannotExecuteShortSetApprovalForAllCallData() external {
@@ -585,7 +614,7 @@ contract ArbitraryCallsProposalTest is
                 calls[0].data.length
             )
         );
-        testContract.execute(prop);
+        testContract.execute(prop, false);
     }
 
     function _truncate(bytes memory data, uint256 bytesFromEnd) private pure {

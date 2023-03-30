@@ -8,6 +8,7 @@ import "../TestUtils.sol";
 import "../DummyERC721.sol";
 import "../proposals/OpenseaTestUtils.sol";
 import "../../contracts/crowdfund/BuyCrowdfund.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
@@ -15,6 +16,7 @@ import "../../contracts/utils/Proxy.sol";
 contract OpenseaFulfillOrderTest is Test, TestUtils, OpenseaTestUtils {
     BuyCrowdfund cf;
     Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
     DummyERC721 token;
     uint256 tokenId;
 
@@ -30,10 +32,15 @@ contract OpenseaFulfillOrderTest is Test, TestUtils, OpenseaTestUtils {
         Globals globals = new Globals(address(this));
         MockPartyFactory partyFactory = new MockPartyFactory();
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
 
         BuyCrowdfund buyCrowdfundImpl = new BuyCrowdfund(globals);
         govOpts.hosts = new address[](1);
         govOpts.hosts[0] = address(this);
+        govOpts.partyFactory = partyFactory;
 
         // Create a BuyCrowdfund
         cf = BuyCrowdfund(
@@ -60,7 +67,8 @@ contract OpenseaFulfillOrderTest is Test, TestUtils, OpenseaTestUtils {
                                 gateKeeper: IGateKeeper(address(0)),
                                 gateKeeperId: 0,
                                 onlyHostCanBuy: false,
-                                governanceOpts: govOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -128,6 +136,7 @@ contract OpenseaFulfillOrderTest is Test, TestUtils, OpenseaTestUtils {
             currentPrice,
             abi.encodeCall(SEAPORT.fulfillOrder, (order, bytes32(0))),
             govOpts,
+            proposalEngineOpts,
             0
         );
 

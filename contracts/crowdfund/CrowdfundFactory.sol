@@ -11,6 +11,8 @@ import "./BuyCrowdfund.sol";
 import "./CollectionBuyCrowdfund.sol";
 import "./RollingAuctionCrowdfund.sol";
 import "./CollectionBatchBuyCrowdfund.sol";
+import "./InitialETHCrowdfund.sol";
+import "./ReraiseETHCrowdfund.sol";
 
 /// @notice Factory used to deploys new proxified `Crowdfund` instances.
 contract CrowdfundFactory {
@@ -27,29 +29,32 @@ contract CrowdfundFactory {
     );
     event RollingAuctionCrowdfundCreated(
         RollingAuctionCrowdfund crowdfund,
-        RollingAuctionCrowdfund.RollingAuctionCrowdfundOptions opts
+        AuctionCrowdfundBase.AuctionCrowdfundOptions opts,
+        bytes32 allowedAuctionsMerkleRoot
     );
     event CollectionBatchBuyCrowdfundCreated(
         CollectionBatchBuyCrowdfund crowdfund,
         CollectionBatchBuyCrowdfund.CollectionBatchBuyCrowdfundOptions opts
     );
-
-    // The `Globals` contract storing global configuration values. This contract
-    // is immutable and it’s address will never change.
-    IGlobals private immutable _GLOBALS;
-
-    // Set the `Globals` contract.
-    constructor(IGlobals globals) {
-        _GLOBALS = globals;
-    }
+    event InitialETHCrowdfundCreated(
+        InitialETHCrowdfund crowdfund,
+        InitialETHCrowdfund.InitialETHCrowdfundOptions crowdfundOpts,
+        InitialETHCrowdfund.ETHPartyOptions partyOpts
+    );
+    event ReraiseETHCrowdfundCreated(
+        ReraiseETHCrowdfund crowdfund,
+        ETHCrowdfundBase.ETHCrowdfundOptions opts
+    );
 
     /// @notice Create a new crowdfund to purchase a specific NFT (i.e., with a
     ///         known token ID) listing for a known price.
+    /// @param crowdfundImpl The implementation contract of the crowdfund to create.
     /// @param opts Options used to initialize the crowdfund. These are fixed
     ///             and cannot be changed later.
     /// @param createGateCallData Encoded calldata used by `createGate()` to
     ///                           create the crowdfund if one is specified in `opts`.
     function createBuyCrowdfund(
+        BuyCrowdfund crowdfundImpl,
         BuyCrowdfund.BuyCrowdfundOptions memory opts,
         bytes memory createGateCallData
     ) public payable returns (BuyCrowdfund inst) {
@@ -57,7 +62,7 @@ contract CrowdfundFactory {
         inst = BuyCrowdfund(
             payable(
                 new Proxy{ value: msg.value }(
-                    _GLOBALS.getImplementation(LibGlobals.GLOBAL_BUY_CF_IMPL),
+                    Implementation(address(crowdfundImpl)),
                     abi.encodeCall(BuyCrowdfund.initialize, (opts))
                 )
             )
@@ -67,11 +72,13 @@ contract CrowdfundFactory {
 
     /// @notice Create a new crowdfund to bid on an auction for a specific NFT
     ///         (i.e. with a known token ID).
+    /// @param crowdfundImpl The implementation contract of the crowdfund to create.
     /// @param opts Options used to initialize the crowdfund. These are fixed
     ///             and cannot be changed later.
     /// @param createGateCallData Encoded calldata used by `createGate()` to create
     ///                           the crowdfund if one is specified in `opts`.
     function createAuctionCrowdfund(
+        AuctionCrowdfund crowdfundImpl,
         AuctionCrowdfundBase.AuctionCrowdfundOptions memory opts,
         bytes memory createGateCallData
     ) public payable returns (AuctionCrowdfund inst) {
@@ -79,7 +86,7 @@ contract CrowdfundFactory {
         inst = AuctionCrowdfund(
             payable(
                 new Proxy{ value: msg.value }(
-                    _GLOBALS.getImplementation(LibGlobals.GLOBAL_AUCTION_CF_IMPL),
+                    Implementation(address(crowdfundImpl)),
                     abi.encodeCall(AuctionCrowdfund.initialize, (opts))
                 )
             )
@@ -88,25 +95,31 @@ contract CrowdfundFactory {
     }
 
     /// @notice Create a new crowdfund to bid on an auctions for an NFT from a collection
-    ///         on a market (eg. Nouns).
+    ///         on a market (e.g. Nouns).
+    /// @param crowdfundImpl The implementation contract of the crowdfund to create.
     /// @param opts Options used to initialize the crowdfund. These are fixed
     ///             and cannot be changed later.
     /// @param createGateCallData Encoded calldata used by `createGate()` to create
     ///                           the crowdfund if one is specified in `opts`.
     function createRollingAuctionCrowdfund(
-        RollingAuctionCrowdfund.RollingAuctionCrowdfundOptions memory opts,
+        RollingAuctionCrowdfund crowdfundImpl,
+        AuctionCrowdfundBase.AuctionCrowdfundOptions memory opts,
+        bytes32 allowedAuctionsMerkleRoot,
         bytes memory createGateCallData
     ) public payable returns (RollingAuctionCrowdfund inst) {
         opts.gateKeeperId = _prepareGate(opts.gateKeeper, opts.gateKeeperId, createGateCallData);
         inst = RollingAuctionCrowdfund(
             payable(
                 new Proxy{ value: msg.value }(
-                    _GLOBALS.getImplementation(LibGlobals.GLOBAL_ROLLING_AUCTION_CF_IMPL),
-                    abi.encodeCall(RollingAuctionCrowdfund.initialize, (opts))
+                    Implementation(address(crowdfundImpl)),
+                    abi.encodeCall(
+                        RollingAuctionCrowdfund.initialize,
+                        (opts, allowedAuctionsMerkleRoot)
+                    )
                 )
             )
         );
-        emit RollingAuctionCrowdfundCreated(inst, opts);
+        emit RollingAuctionCrowdfundCreated(inst, opts, allowedAuctionsMerkleRoot);
     }
 
     /// @notice Create a new crowdfund to purchases any NFT from a collection
@@ -116,6 +129,7 @@ contract CrowdfundFactory {
     /// @param createGateCallData Encoded calldata used by `createGate()` to create
     ///                           the crowdfund if one is specified in `opts`.
     function createCollectionBuyCrowdfund(
+        CollectionBuyCrowdfund crowdfundImpl,
         CollectionBuyCrowdfund.CollectionBuyCrowdfundOptions memory opts,
         bytes memory createGateCallData
     ) public payable returns (CollectionBuyCrowdfund inst) {
@@ -123,7 +137,7 @@ contract CrowdfundFactory {
         inst = CollectionBuyCrowdfund(
             payable(
                 new Proxy{ value: msg.value }(
-                    _GLOBALS.getImplementation(LibGlobals.GLOBAL_COLLECTION_BUY_CF_IMPL),
+                    Implementation(address(crowdfundImpl)),
                     abi.encodeCall(CollectionBuyCrowdfund.initialize, (opts))
                 )
             )
@@ -138,6 +152,7 @@ contract CrowdfundFactory {
     /// @param createGateCallData Encoded calldata used by `createGate()` to create
     ///                           the crowdfund if one is specified in `opts`.
     function createCollectionBatchBuyCrowdfund(
+        CollectionBatchBuyCrowdfund crowdfundImpl,
         CollectionBatchBuyCrowdfund.CollectionBatchBuyCrowdfundOptions memory opts,
         bytes memory createGateCallData
     ) public payable returns (CollectionBatchBuyCrowdfund inst) {
@@ -145,12 +160,65 @@ contract CrowdfundFactory {
         inst = CollectionBatchBuyCrowdfund(
             payable(
                 new Proxy{ value: msg.value }(
-                    _GLOBALS.getImplementation(LibGlobals.GLOBAL_COLLECTION_BATCH_BUY_CF_IMPL),
+                    Implementation(address(crowdfundImpl)),
                     abi.encodeCall(CollectionBatchBuyCrowdfund.initialize, (opts))
                 )
             )
         );
         emit CollectionBatchBuyCrowdfundCreated(inst, opts);
+    }
+
+    /// @notice Create a new crowdfund to raise ETH for a new party.
+    /// @param crowdfundImpl The implementation contract of the crowdfund to create.
+    /// @param crowdfundOpts Options used to initialize the crowdfund. These are fixed
+    ///                      and cannot be changed later.
+    /// @param partyOpts Options used to initialize the party created by the crowdfund.
+    ///                  These are fixed and cannot be changed later.
+    /// @param createGateCallData Encoded calldata used by `createGate()` to create
+    ///                           the crowdfund if one is specified in `opts`.
+    function createInitialETHCrowdfund(
+        InitialETHCrowdfund crowdfundImpl,
+        InitialETHCrowdfund.InitialETHCrowdfundOptions memory crowdfundOpts,
+        InitialETHCrowdfund.ETHPartyOptions memory partyOpts,
+        bytes memory createGateCallData
+    ) public payable returns (InitialETHCrowdfund inst) {
+        crowdfundOpts.gateKeeperId = _prepareGate(
+            crowdfundOpts.gateKeeper,
+            crowdfundOpts.gateKeeperId,
+            createGateCallData
+        );
+        inst = InitialETHCrowdfund(
+            payable(
+                new Proxy{ value: msg.value }(
+                    Implementation(address(crowdfundImpl)),
+                    abi.encodeCall(InitialETHCrowdfund.initialize, (crowdfundOpts, partyOpts))
+                )
+            )
+        );
+        emit InitialETHCrowdfundCreated(inst, crowdfundOpts, partyOpts);
+    }
+
+    /// @notice Create a new crowdfund to raise ETH for an existing party.
+    /// @param crowdfundImpl The implementation contract of the crowdfund to create.
+    /// @param opts Options used to initialize the crowdfund. These are fixed
+    ///             and cannot be changed later.
+    /// @param createGateCallData Encoded calldata used by `createGate()` to create
+    ///                           the crowdfund if one is specified in `opts`.
+    function createReraiseETHCrowdfund(
+        ReraiseETHCrowdfund crowdfundImpl,
+        ETHCrowdfundBase.ETHCrowdfundOptions memory opts,
+        bytes memory createGateCallData
+    ) public payable returns (ReraiseETHCrowdfund inst) {
+        opts.gateKeeperId = _prepareGate(opts.gateKeeper, opts.gateKeeperId, createGateCallData);
+        inst = ReraiseETHCrowdfund(
+            payable(
+                new Proxy{ value: msg.value }(
+                    Implementation(address(crowdfundImpl)),
+                    abi.encodeCall(ReraiseETHCrowdfund.initialize, (opts))
+                )
+            )
+        );
+        emit ReraiseETHCrowdfundCreated(inst, opts);
     }
 
     function _prepareGate(

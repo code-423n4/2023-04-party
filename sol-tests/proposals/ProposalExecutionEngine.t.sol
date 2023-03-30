@@ -87,6 +87,24 @@ contract ProposalExecutionEngineTest is Test, TestUtils {
             );
     }
 
+    function _createDistributeProposalData() private pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                bytes4(uint32(ProposalExecutionEngine.ProposalType.Distribute))
+                // Data doesn't matter because it should revert when
+                // `distributionsRequireVote` is false
+            );
+    }
+
+    function _createAddAuthorityProposalData() private pure returns (bytes memory) {
+        return
+            abi.encodeWithSelector(
+                bytes4(uint32(ProposalExecutionEngine.ProposalType.AddAuthority))
+                // Data doesn't matter because it should revert when
+                // `enableAddAuthorityProposal` is false
+            );
+    }
+
     function test_executeProposal_rejectsBadProgressData() public {
         // This is a two-step proposal. We will execute the first step
         // then execute again with progressData that does not match
@@ -217,6 +235,32 @@ contract ProposalExecutionEngineTest is Test, TestUtils {
         assertTrue(_executeProposal(executeParams2));
         assertEq(eng.getCurrentInProgressProposalId(), 0);
         assertEq(eng.getNextProgressDataHash(), 0);
+    }
+
+    function test_cannotExecuteAddAuthorityProposalIfDisabled() public {
+        IProposalExecutionEngine.ExecuteProposalParams memory executeParams = _createTestProposal(
+            _createAddAuthorityProposalData()
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProposalExecutionEngine.ProposalDisabled.selector,
+                ProposalExecutionEngine.ProposalType.AddAuthority
+            )
+        );
+        _executeProposal(executeParams);
+    }
+
+    function test_cannotExecuteDistributeProposalIfDistributionsDoNotRequireVote() public {
+        IProposalExecutionEngine.ExecuteProposalParams memory executeParams = _createTestProposal(
+            _createDistributeProposalData()
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ProposalExecutionEngine.ProposalDisabled.selector,
+                ProposalExecutionEngine.ProposalType.Distribute
+            )
+        );
+        _executeProposal(executeParams);
     }
 
     function _executeProposal(

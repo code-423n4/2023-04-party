@@ -13,6 +13,7 @@ import "../DummyERC721.sol";
 import "../TestUsers.sol";
 
 contract PartyGovernanceTest is Test, TestUtils {
+    Party partyImpl;
     PartyFactory partyFactory;
     DummySimpleProposalEngineImpl eng;
     PartyParticipant john;
@@ -26,14 +27,14 @@ contract PartyGovernanceTest is Test, TestUtils {
     function setUp() public {
         GlobalsAdmin globalsAdmin = new GlobalsAdmin();
         Globals globals = globalsAdmin.globals();
-        Party partyImpl = new Party(globals);
+        partyImpl = new Party(globals);
         globalsAdmin.setPartyImpl(address(partyImpl));
         globalsAdmin.setGlobalDaoWallet(globalDaoWalletAddress);
 
         eng = new DummySimpleProposalEngineImpl();
         globalsAdmin.setProposalEng(address(eng));
 
-        partyFactory = new PartyFactory(globals);
+        partyFactory = new PartyFactory();
 
         john = new PartyParticipant();
         danny = new PartyParticipant();
@@ -54,6 +55,7 @@ contract PartyGovernanceTest is Test, TestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(this),
                     host2: address(0),
@@ -149,6 +151,7 @@ contract PartyGovernanceTest is Test, TestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(this),
                     host2: address(0),
@@ -262,6 +265,7 @@ contract PartyGovernanceTest is Test, TestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(nicholas),
                     host2: address(0),
@@ -322,6 +326,7 @@ contract PartyGovernanceTest is Test, TestUtils {
     function testPartyMemberCannotVoteTwice() public {
         // Create party + mock proposal engine
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(nicholas),
                 host2: address(0),
@@ -366,6 +371,7 @@ contract PartyGovernanceTest is Test, TestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(john),
                     host2: address(danny),
@@ -428,6 +434,7 @@ contract PartyGovernanceTest is Test, TestUtils {
             IERC721[] memory preciousTokens,
             uint256[] memory preciousTokenIds
         ) = partyAdmin.createParty(
+                partyImpl,
                 PartyAdmin.PartyCreationMinimalOptions({
                     host1: address(john),
                     host2: address(danny),
@@ -494,6 +501,7 @@ contract PartyGovernanceTest is Test, TestUtils {
 
     function testEmergencyWithdrawal() public {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(nicholas),
                 host2: address(0),
@@ -518,6 +526,7 @@ contract PartyGovernanceTest is Test, TestUtils {
 
     function testEmergencyExecute() public {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(nicholas),
                 host2: address(0),

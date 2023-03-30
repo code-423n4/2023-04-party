@@ -9,25 +9,22 @@ contract MockPartyFactory is IPartyFactory {
 
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
     );
 
-    function GLOBALS() external pure returns (IGlobals g) {}
-
-    function abdicate(Party) external {}
-
     function createParty(
-        address authority,
+        Party,
+        address[] memory authorities,
         Party.PartyOptions memory opts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds
     ) external returns (Party party) {
         emit MockPartyFactoryCreateParty(
             msg.sender,
-            authority,
+            authorities,
             opts,
             preciousTokens,
             preciousTokenIds

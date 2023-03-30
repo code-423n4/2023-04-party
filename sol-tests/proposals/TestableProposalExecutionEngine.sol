@@ -31,7 +31,7 @@ contract TestableProposalExecutionEngine is ProposalExecutionEngine {
     {}
 
     function getProposalEngineImpl() external view returns (IProposalExecutionEngine) {
-        return _getProposalExecutionEngine();
+        return _getSharedProposalStorage().engineImpl;
     }
 
     function _execute(
@@ -54,7 +54,7 @@ contract TestableProposalExecutionEngine is ProposalExecutionEngine {
             emit TestEcho(emitValue2);
             return ""; // Done
         }
-        // Override the ListOnZora propsal type to do a one step emit.
+        // Override the ListOnZora proposal type to do a one step emit.
         if (pt == ProposalExecutionEngine.ProposalType.ListOnZora) {
             uint256 emitValue = abi.decode(params.proposalData, (uint256));
             emit TestEcho(emitValue);

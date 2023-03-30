@@ -4,12 +4,12 @@ pragma solidity ^0.8;
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
+import "../../contracts/crowdfund/Crowdfund.sol";
 import "../../contracts/party/PartyFactory.sol";
 import "../../contracts/party/Party.sol";
 import "../../contracts/globals/Globals.sol";
 import "../../contracts/renderers/PartyNFTRenderer.sol";
 import "../../contracts/renderers/RendererStorage.sol";
-import "../../contracts/renderers/MetadataRegistry.sol";
 import "../../contracts/renderers/fonts/PixeldroidConsoleFont.sol";
 import "../proposals/DummySimpleProposalEngineImpl.sol";
 import "../proposals/DummyProposalEngineImpl.sol";
@@ -19,11 +19,11 @@ import "../TestUsers.sol";
 import "../TestUtils.sol";
 
 contract PartyGovernanceNFTTest is Test, TestUtils {
+    Party partyImpl;
     PartyFactory partyFactory;
     DummySimpleProposalEngineImpl eng;
     PartyNFTRenderer nftRenderer;
     RendererStorage nftRendererStorage;
-    MetadataRegistry metadataRegistry;
     TestTokenDistributor tokenDistributor;
     Globals globals;
     PartyParticipant john;
@@ -34,11 +34,9 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
     constructor() {
         GlobalsAdmin globalsAdmin = new GlobalsAdmin();
         globals = globalsAdmin.globals();
-        Party partyImpl = new Party(globals);
-        metadataRegistry = new MetadataRegistry(globals, _toAddressArray(address(this)));
+        partyImpl = new Party(globals);
         globalsAdmin.setPartyImpl(address(partyImpl));
         globalsAdmin.setGlobalDaoWallet(globalDaoWalletAddress);
-        globalsAdmin.setMetadataRegistry(address(metadataRegistry));
 
         tokenDistributor = new TestTokenDistributor();
         globalsAdmin.setTokenDistributor(address(tokenDistributor));
@@ -46,7 +44,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
         eng = new DummySimpleProposalEngineImpl();
         globalsAdmin.setProposalEng(address(eng));
 
-        partyFactory = new PartyFactory(globals);
+        partyFactory = new PartyFactory();
 
         john = new PartyParticipant();
         partyAdmin = new PartyAdmin(partyFactory);
@@ -83,6 +81,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
 
     function testMint() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -98,8 +97,9 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
         party.mint(_randomAddress(), 1, _randomAddress());
     }
 
-    function testMint_onlyMinter() external {
+    function testMint_onlyAuthority() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -112,19 +112,14 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
             })
         );
         address notAuthority = _randomAddress();
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PartyGovernanceNFT.OnlyMintAuthorityError.selector,
-                notAuthority,
-                address(partyAdmin)
-            )
-        );
+        vm.expectRevert(PartyGovernanceNFT.OnlyAuthorityError.selector);
         vm.prank(notAuthority);
         party.mint(_randomAddress(), 1, _randomAddress());
     }
 
     function testMint_cannotMintBeyondTotalVotingPower() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -144,6 +139,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
 
     function testMint_cannotMintBeyondTotalVotingPower_twoMints() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -167,6 +163,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
 
     function testAbdicate() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -178,14 +175,15 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
                 feeRecipient: payable(0)
             })
         );
-        assertEq(party.mintAuthority(), address(partyAdmin));
+        assertTrue(party.isAuthority(address(partyAdmin)));
         vm.prank(address(partyAdmin));
-        party.abdicate();
-        assertEq(party.mintAuthority(), address(0));
+        party.abdicateAuthority();
+        assertFalse(party.isAuthority(address(partyAdmin)));
     }
 
-    function testAbdicate_onlyMinter() external {
+    function testAbdicate_onlyAuthority() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -198,19 +196,14 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
             })
         );
         address notAuthority = _randomAddress();
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PartyGovernanceNFT.OnlyMintAuthorityError.selector,
-                notAuthority,
-                address(partyAdmin)
-            )
-        );
+        vm.expectRevert(PartyGovernanceNFT.OnlyAuthorityError.selector);
         vm.prank(notAuthority);
-        party.abdicate();
+        party.abdicateAuthority();
     }
 
     function test_supportsInterface() external {
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -288,7 +281,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
 
     // Test rendering using a preset ID 0, which is reserved to indicate to
     // parties to use the same preset as the crowdfund that created it (or of
-    // whatever `mintAuthority()` chose if created outside the conventional flow).
+    // whatever `authority()` chose if created outside the conventional flow).
     function testTokenURI_usingReservedPresetId() public {
         // Create party
         DummyParty party = new DummyParty(address(globals), "Party of the Living Dead");
@@ -297,7 +290,7 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
         nftRendererStorage.useCustomizationPreset(5); // Should make card purple w/ light mode.
 
         // Setting to preset ID 0 should cause `tokenURI()` to use the
-        // customization option of the `mintAuthority()` (which for this test is
+        // customization option of the `authority()` (which for this test is
         // the caller).
         party.useCustomizationPreset(0);
 
@@ -358,38 +351,6 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
         assertTrue(bytes(tokenURI).length > 0);
     }
 
-    function testTokenURI_customMetadata() public {
-        // Create party
-        DummyParty party = new DummyParty(address(globals), "Party of the Living Dead");
-
-        // Create dummy crowdfund address to use as mint authority.
-        DummyCrowdfund crowdfund = new DummyCrowdfund();
-        Crowdfund.FixedGovernanceOpts memory opts;
-        opts.hosts = _toAddressArray(address(this));
-        crowdfund.setGovernanceOptsHash(opts);
-        party.setMintAuthority(address(crowdfund));
-
-        TokenMetadata memory metadata = TokenMetadata({
-            name: "NAME",
-            description: "DESCRIPTION",
-            image: "IMAGE"
-        });
-
-        // Set custom metadata
-        metadataRegistry.setCustomMetadata(Crowdfund(address(crowdfund)), opts, 0, metadata);
-
-        // Mint governance NFT
-        uint256 tokenId = 396;
-        party.mint(tokenId);
-
-        string memory tokenURI = party.tokenURI(tokenId);
-
-        // Uncomment for testing rendering:
-        console.log(tokenURI);
-
-        assertTrue(bytes(tokenURI).length > 0);
-    }
-
     function testContractURI() external {
         // Create party
         DummyParty party = new DummyParty(address(globals), "Party of the Living Dead");
@@ -405,43 +366,10 @@ contract PartyGovernanceNFTTest is Test, TestUtils {
         assertTrue(bytes(contractURI).length > 0);
     }
 
-    function testContractURI_customMetadata() public {
-        // Create party
-        DummyParty party = new DummyParty(address(globals), "Party of the Living Dead");
-
-        // Create dummy crowdfund address to use as mint authority.
-        DummyCrowdfund crowdfund = new DummyCrowdfund();
-        Crowdfund.FixedGovernanceOpts memory opts;
-        opts.hosts = _toAddressArray(address(this));
-        crowdfund.setGovernanceOptsHash(opts);
-        party.setMintAuthority(address(crowdfund));
-
-        CollectionMetadata memory metadata = CollectionMetadata({
-            name: "NAME",
-            description: "DESCRIPTION",
-            image: "IMAGE",
-            banner: "BANNER"
-        });
-
-        // Set custom metadata
-        metadataRegistry.setCustomCollectionMetadata(
-            Crowdfund(address(crowdfund)),
-            opts,
-            0,
-            metadata
-        );
-
-        string memory contractURI = party.contractURI();
-
-        // Uncomment for testing rendering:
-        // console.log(contractURI);
-
-        assertTrue(bytes(contractURI).length > 0);
-    }
-
     function testRoyaltyInfo() external {
         // Create party
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -501,7 +429,7 @@ contract DummyParty is ReadOnlyDelegateCall {
     mapping(address => uint256) internal _balanceOf;
     mapping(uint256 => address) public getApproved;
     mapping(address => mapping(address => bool)) public isApprovedForAll;
-    address public mintAuthority;
+    address public authority;
     uint256 public tokenCount;
     mapping(uint256 => uint256) public votingPowerByTokenId;
 
@@ -513,7 +441,7 @@ contract DummyParty is ReadOnlyDelegateCall {
             RendererStorage(GLOBALS.getAddress(LibGlobals.GLOBAL_RENDERER_STORAGE))
                 .useCustomizationPreset(customizationPresetId);
         } else {
-            mintAuthority = msg.sender;
+            authority = msg.sender;
         }
     }
 
@@ -552,10 +480,6 @@ contract DummyParty is ReadOnlyDelegateCall {
 
     function setVotingPowerPercentage(uint256 vp) external {
         votingPowerPercentage = vp;
-    }
-
-    function setMintAuthority(address authority) external {
-        mintAuthority = authority;
     }
 
     function getDistributionShareOf(uint256) external view returns (uint256) {

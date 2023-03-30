@@ -18,14 +18,6 @@ contract TestableFractionalizeProposal is FractionalizeProposal {
     string public constant name = "Test party";
     string public constant symbol = "TST";
 
-    // A shallow version of the `onlyActiveMemberOrSelf` modifier in `PartyGovernance`.
-    modifier onlyActiveMemberOrSelf() {
-        if (msg.sender != address(this)) {
-            revert("FAIL");
-        }
-        _;
-    }
-
     constructor(IFractionalV1VaultFactory vaultFactory) FractionalizeProposal(vaultFactory) {}
 
     function getGovernanceValues() external view returns (PartyGovernance.GovernanceValues memory) {
@@ -45,11 +37,17 @@ contract TestableFractionalizeProposal is FractionalizeProposal {
     // This is here because during the proposal, the party will call
     // `distribute()` on itself.
     function distribute(
+        uint256,
         ITokenDistributor.TokenType tokenType,
         address token,
         uint256 tokenId
-    ) external onlyActiveMemberOrSelf returns (ITokenDistributor.DistributionInfo memory distInfo) {
+    ) external returns (ITokenDistributor.DistributionInfo memory distInfo) {
+        if (msg.sender != address(this)) {
+            revert("FAIL");
+        }
+
         emit MockCreateDistribution(msg.sender, tokenType, token, tokenId);
+
         return distInfo;
     }
 }

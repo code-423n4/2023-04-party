@@ -18,18 +18,20 @@ contract TestablePartyGovernanceNFT is PartyGovernanceNFT {
         string memory symbol_,
         uint256 customizationPresetId,
         PartyGovernance.GovernanceOpts memory governanceOpts,
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds,
-        address mintAuthority_
+        address[] memory authorities
     ) external {
         _initialize(
             name_,
             symbol_,
             customizationPresetId,
             governanceOpts,
+            proposalEngineOpts,
             preciousTokens,
             preciousTokenIds,
-            mintAuthority_
+            authorities
         );
     }
 
@@ -45,6 +47,7 @@ contract TestablePartyGovernanceNFT is PartyGovernanceNFT {
 contract PartyGovernanceNFTUnitTest is TestUtils {
     TestablePartyGovernanceNFT nft = new TestablePartyGovernanceNFT();
     PartyGovernance.GovernanceOpts defaultGovernanceOpts;
+    ProposalStorage.ProposalEngineOpts defaultProposalEngineOpts;
 
     function _initGovernance() private {
         defaultGovernanceOpts.totalVotingPower = 1e18;
@@ -53,9 +56,10 @@ contract PartyGovernanceNFTUnitTest is TestUtils {
             "TST",
             0,
             defaultGovernanceOpts,
+            defaultProposalEngineOpts,
             new IERC721[](0),
             new uint256[](0),
-            address(this)
+            _toAddressArray(address(this))
         );
     }
 
@@ -146,13 +150,7 @@ contract PartyGovernanceNFTUnitTest is TestUtils {
         uint256 vp = _randomUint256() % defaultGovernanceOpts.totalVotingPower;
         address notAuthority = _randomAddress();
         vm.prank(notAuthority);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PartyGovernanceNFT.OnlyMintAuthorityError.selector,
-                notAuthority,
-                address(this)
-            )
-        );
+        vm.expectRevert(PartyGovernanceNFT.OnlyAuthorityError.selector);
         nft.mint(from, vp, from);
     }
 

@@ -27,7 +27,8 @@ contract CrowdfundHelpers is Test, TestUtils {
     address defaultInitialDelegate;
     IGateKeeper defaultGateKeeper;
     bytes12 defaultGateKeeperId;
-    Crowdfund.FixedGovernanceOpts defaultGovernanceOpts;
+    Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     Globals globals;
     AuctionCrowdfund auctionCrowdfundImpl;
@@ -87,7 +88,8 @@ contract CrowdfundHelpers is Test, TestUtils {
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
                                 onlyHostCanBid: false,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -123,7 +125,8 @@ contract CrowdfundHelpers is Test, TestUtils {
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
                                 onlyHostCanBuy: false,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -135,7 +138,7 @@ contract CrowdfundHelpers is Test, TestUtils {
     function _createCollectionBuyCrowdfundCrowdfund(
         uint96 initialContribution
     ) private returns (CollectionBuyCrowdfund cf) {
-        defaultGovernanceOpts.hosts = _toAddressArray(_randomAddress());
+        govOpts.hosts = _toAddressArray(_randomAddress());
         cf = CollectionBuyCrowdfund(
             payable(
                 address(
@@ -158,7 +161,8 @@ contract CrowdfundHelpers is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )

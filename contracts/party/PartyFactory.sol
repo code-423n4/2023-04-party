@@ -12,38 +12,31 @@ import "./IPartyFactory.sol";
 
 /// @notice Factory used to deploy new proxified `Party` instances.
 contract PartyFactory is IPartyFactory {
-    error InvalidAuthorityError(address authority);
-
-    /// @inheritdoc IPartyFactory
-    IGlobals public immutable GLOBALS;
-
-    // Set the `Globals` contract.
-    constructor(IGlobals globals) {
-        GLOBALS = globals;
-    }
+    error NoAuthorityError();
 
     /// @inheritdoc IPartyFactory
     function createParty(
-        address authority,
+        Party partyImpl,
+        address[] memory authorities,
         Party.PartyOptions memory opts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds
     ) external returns (Party party) {
-        // Ensure a valid authority is set to mint governance NFTs.
-        if (authority == address(0)) {
-            revert InvalidAuthorityError(authority);
+        // Ensure an authority is set to mint governance NFTs.
+        if (authorities.length == 0) {
+            revert NoAuthorityError();
         }
         // Deploy a new proxified `Party` instance.
         Party.PartyInitData memory initData = Party.PartyInitData({
             options: opts,
             preciousTokens: preciousTokens,
             preciousTokenIds: preciousTokenIds,
-            mintAuthority: authority
+            authorities: authorities
         });
         party = Party(
             payable(
                 new Proxy(
-                    GLOBALS.getImplementation(LibGlobals.GLOBAL_PARTY_IMPL),
+                    Implementation(address(partyImpl)),
                     abi.encodeCall(Party.initialize, (initData))
                 )
             )

@@ -9,6 +9,7 @@ import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
 import "../../contracts/vendor/markets/IFoundationMarket.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 
 import "./MockPartyFactory.sol";
 import "./MockParty.sol";
@@ -27,7 +28,8 @@ contract FoundationCrowdfundForkedTest is TestUtils {
     AuctionCrowdfund pbImpl = new AuctionCrowdfund(globals);
     AuctionCrowdfund cf;
 
-    Crowdfund.FixedGovernanceOpts defaultGovOpts;
+    Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     // Initialize Foundation contracts
     IFoundationMarket foundation = IFoundationMarket(0xcDA72070E455bb31C7690a170224Ce43623d0B6f);
@@ -38,8 +40,15 @@ contract FoundationCrowdfundForkedTest is TestUtils {
     uint256 auctionId;
 
     constructor() onlyForked {
+        govOpts.partyImpl = Party(payable(address(party)));
+        govOpts.partyFactory = partyFactory;
+
         // Initialize PartyFactory for creating parties after a successful crowdfund.
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
 
         // Create a reserve auction on Foundation to bid on
         nftContract.approve(address(foundation), tokenId);
@@ -76,7 +85,8 @@ contract FoundationCrowdfundForkedTest is TestUtils {
                                 gateKeeper: IGateKeeper(address(0)),
                                 gateKeeperId: 0,
                                 onlyHostCanBid: false,
-                                governanceOpts: defaultGovOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -92,32 +102,22 @@ contract FoundationCrowdfundForkedTest is TestUtils {
     // Test creating a crowdfund party around a Foundation auction + winning the auction
     function testForked_WinningFoundationAuction() external onlyForked {
         // Bid on current Foundation auction.
-        cf.bid(defaultGovOpts, 0);
+        cf.bid(govOpts, proposalEngineOpts, 0);
 
         // Check that we are highest bidder.
         uint256 lastBid = cf.lastBid();
-        (
-            ,
-            ,
-            address highestBidder,
-            uint256 endTime,
-            uint256 highestBid,
-            ,
-            ,
-            ,
-            ,
-
-        ) = foundationHelper.getNFTDetails(address(nftContract), tokenId);
+        (, , address highestBidder, uint256 expiry, uint256 highestBid, , , , , ) = foundationHelper
+            .getNFTDetails(address(nftContract), tokenId);
         assertEq(lastBid, highestBid);
         assertEq(address(cf), highestBidder);
 
         // Wait for the auction to end and check that we won.
-        vm.warp(endTime + 1);
+        vm.warp(expiry + 1);
 
         // Finalize the crowdfund.
         _expectEmit0();
         emit Won(lastBid, Party(payable(address(party))));
-        cf.finalize(defaultGovOpts);
+        cf.finalize(govOpts, proposalEngineOpts);
         assertEq(nftContract.ownerOf(tokenId), address(party));
         assertEq(address(cf.party()), address(party));
         assertTrue(foundationMarket.isFinalized(tokenId));
@@ -125,27 +125,17 @@ contract FoundationCrowdfundForkedTest is TestUtils {
 
     function testForked_WinningFoundationAuction_finalizedBefore() external onlyForked {
         // Bid on current Foundation auction.
-        cf.bid(defaultGovOpts, 0);
+        cf.bid(govOpts, proposalEngineOpts, 0);
 
         // Check that we are highest bidder.
         uint256 lastBid = cf.lastBid();
-        (
-            ,
-            ,
-            address highestBidder,
-            uint256 endTime,
-            uint256 highestBid,
-            ,
-            ,
-            ,
-            ,
-
-        ) = foundationHelper.getNFTDetails(address(nftContract), tokenId);
+        (, , address highestBidder, uint256 expiry, uint256 highestBid, , , , , ) = foundationHelper
+            .getNFTDetails(address(nftContract), tokenId);
         assertEq(lastBid, highestBid);
         assertEq(address(cf), highestBidder);
 
         // Wait for the auction to end and check that we won.
-        vm.warp(endTime + 1);
+        vm.warp(expiry + 1);
 
         // Finalize the auction before `finalize()` is called by the crowdfund.
         foundationMarket.finalize(auctionId);
@@ -153,7 +143,7 @@ contract FoundationCrowdfundForkedTest is TestUtils {
         // Finalize the crowdfund.
         _expectEmit0();
         emit Won(lastBid, Party(payable(address(party))));
-        cf.finalize(defaultGovOpts);
+        cf.finalize(govOpts, proposalEngineOpts);
         assertEq(nftContract.ownerOf(tokenId), address(party));
         assertEq(address(cf.party()), address(party));
         assertTrue(foundationMarket.isFinalized(tokenId));
@@ -162,41 +152,41 @@ contract FoundationCrowdfundForkedTest is TestUtils {
     // Test creating a crowdfund party around a Foundation auction + losing the auction
     function testForked_LosingFoundationAuction() external onlyForked {
         // Bid on current Foundation auction.
-        cf.bid(defaultGovOpts, 0);
+        cf.bid(govOpts, proposalEngineOpts, 0);
 
         // We outbid our own party (sneaky!)
         vm.deal(address(this), 1001 ether);
         foundation.placeBid{ value: 1001 ether }(auctionId);
 
         // Wait for the auction to end and check that we lost.
-        (, , , uint256 endTime, , , , , , ) = foundationHelper.getNFTDetails(
+        (, , , uint256 expiry, , , , , , ) = foundationHelper.getNFTDetails(
             address(nftContract),
             tokenId
         );
-        vm.warp(endTime + 1);
+        vm.warp(expiry + 1);
 
         // Finalize the crowdfund.
         _expectEmit0();
         emit Lost();
-        cf.finalize(defaultGovOpts);
+        cf.finalize(govOpts, proposalEngineOpts);
         assertEq(address(cf.party()), address(0));
         assertTrue(foundationMarket.isFinalized(tokenId));
     }
 
     function testForked_LosingFoundationAuction_finalizedBefore() external onlyForked {
         // Bid on current Foundation auction.
-        cf.bid(defaultGovOpts, 0);
+        cf.bid(govOpts, proposalEngineOpts, 0);
 
         // We outbid our own party (sneaky!)
         vm.deal(address(this), 1001 ether);
         foundation.placeBid{ value: 1001 ether }(auctionId);
 
         // Wait for the auction to end and check that we lost.
-        (, , , uint256 endTime, , , , , , ) = foundationHelper.getNFTDetails(
+        (, , , uint256 expiry, , , , , , ) = foundationHelper.getNFTDetails(
             address(nftContract),
             tokenId
         );
-        vm.warp(endTime + 1);
+        vm.warp(expiry + 1);
 
         // Finalize the auction before `finalize()` is called by the crowdfund.
         foundationMarket.finalize(auctionId);
@@ -204,7 +194,7 @@ contract FoundationCrowdfundForkedTest is TestUtils {
         // Finalize the crowdfund.
         _expectEmit0();
         emit Lost();
-        cf.finalize(defaultGovOpts);
+        cf.finalize(govOpts, proposalEngineOpts);
         assertEq(address(cf.party()), address(0));
         assertTrue(foundationMarket.isFinalized(tokenId));
     }

@@ -15,27 +15,38 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
     using LibSafeCast for uint256;
     using LibSafeCast for uint96;
 
-    error OnlyMintAuthorityError(address actual, address expected);
+    error OnlyAuthorityError();
+    error OnlySelfError();
+    error UnauthorizedToBurnError();
+
+    event AuthorityAdded(address indexed authority);
+    event AuthorityRemoved(address indexed authority);
 
     // The `Globals` contract storing global configuration values. This contract
     // is immutable and it’s address will never change.
     IGlobals private immutable _GLOBALS;
 
-    /// @notice Who can call `mint()`. Usually this will be the crowdfund contract that
-    /// created the party.
-    address public mintAuthority;
+    /// @notice Address with authority to mint cards and update voting power for the party.
+    mapping(address => bool) public isAuthority;
     /// @notice The number of tokens that have been minted.
     uint96 public tokenCount;
     /// @notice The total minted voting power.
-    ///         Capped to `_governanceValues.totalVotingPower`
+    ///         Capped to `_governanceValues.totalVotingPower` unless minting
+    ///         party cards for initial crowdfund.
     uint96 public mintedVotingPower;
     /// @notice The voting power of `tokenId`.
     mapping(uint256 => uint256) public votingPowerByTokenId;
 
-    modifier onlyMinter() {
-        address minter = mintAuthority;
-        if (msg.sender != minter) {
-            revert OnlyMintAuthorityError(msg.sender, minter);
+    modifier onlyAuthority() {
+        if (!isAuthority[msg.sender]) {
+            revert OnlyAuthorityError();
+        }
+        _;
+    }
+
+    modifier onlySelf() {
+        if (msg.sender != address(this)) {
+            revert OnlySelfError();
         }
         _;
     }
@@ -52,14 +63,22 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
         string memory symbol_,
         uint256 customizationPresetId,
         PartyGovernance.GovernanceOpts memory governanceOpts,
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts,
         IERC721[] memory preciousTokens,
         uint256[] memory preciousTokenIds,
-        address mintAuthority_
+        address[] memory authorities
     ) internal {
-        PartyGovernance._initialize(governanceOpts, preciousTokens, preciousTokenIds);
+        PartyGovernance._initialize(
+            governanceOpts,
+            proposalEngineOpts,
+            preciousTokens,
+            preciousTokenIds
+        );
         name = name_;
         symbol = symbol_;
-        mintAuthority = mintAuthority_;
+        for (uint256 i; i < authorities.length; ++i) {
+            isAuthority[authorities[i]] = true;
+        }
         if (customizationPresetId != 0) {
             RendererStorage(_GLOBALS.getAddress(LibGlobals.GLOBAL_RENDERER_STORAGE))
                 .useCustomizationPreset(customizationPresetId);
@@ -108,7 +127,8 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
     }
 
     /// @notice Mint a governance NFT for `owner` with `votingPower` and
-    /// immediately delegate voting power to `delegate.`
+    ///         immediately delegate voting power to `delegate.` Only callable
+    ///         by an authority.
     /// @param owner The owner of the NFT.
     /// @param votingPower The voting power of the NFT.
     /// @param delegate The address to delegate voting power to.
@@ -116,18 +136,20 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
         address owner,
         uint256 votingPower,
         address delegate
-    ) external onlyMinter onlyDelegateCall returns (uint256 tokenId) {
+    ) external onlyAuthority onlyDelegateCall returns (uint256 tokenId) {
         (uint96 tokenCount_, uint96 mintedVotingPower_) = (tokenCount, mintedVotingPower);
         uint96 totalVotingPower = _governanceValues.totalVotingPower;
         // Cap voting power to remaining unminted voting power supply.
         uint96 votingPower_ = votingPower.safeCastUint256ToUint96();
-        if (totalVotingPower - mintedVotingPower_ < votingPower_) {
+        // Allow minting past total voting power if minting party cards for
+        // initial crowdfund when there is no total voting power.
+        if (totalVotingPower != 0 && totalVotingPower - mintedVotingPower_ < votingPower_) {
             votingPower_ = totalVotingPower - mintedVotingPower_;
         }
-        mintedVotingPower_ += votingPower_;
+
         // Update state.
         tokenId = tokenCount = tokenCount_ + 1;
-        mintedVotingPower = mintedVotingPower_;
+        mintedVotingPower += votingPower_;
         votingPowerByTokenId[tokenId] = votingPower_;
 
         // Use delegate from party over the one set during crowdfund.
@@ -138,6 +160,67 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
 
         _adjustVotingPower(owner, votingPower_.safeCastUint96ToInt192(), delegate);
         _safeMint(owner, tokenId);
+    }
+
+    /// @notice Add voting power to an existing NFT. Only callable by an
+    ///         authority.
+    /// @param tokenId The ID of the NFT to add voting power to.
+    /// @param votingPower The amount of voting power to add.
+    function addVotingPower(
+        uint256 tokenId,
+        uint256 votingPower
+    ) external onlyAuthority onlyDelegateCall {
+        uint96 mintedVotingPower_ = mintedVotingPower;
+        uint96 totalVotingPower = _governanceValues.totalVotingPower;
+        // Cap voting power to remaining unminted voting power supply.
+        uint96 votingPower_ = votingPower.safeCastUint256ToUint96();
+        // Allow minting past total voting power if minting party cards for
+        // initial crowdfund when there is no total voting power.
+        if (totalVotingPower != 0 && totalVotingPower - mintedVotingPower_ < votingPower_) {
+            votingPower_ = totalVotingPower - mintedVotingPower_;
+        }
+
+        // Update state.
+        mintedVotingPower += votingPower_;
+        votingPowerByTokenId[tokenId] += votingPower_;
+
+        _adjustVotingPower(ownerOf(tokenId), votingPower_.safeCastUint96ToInt192(), address(0));
+    }
+
+    /// @notice Update the total voting power of the party. Only callable by
+    ///         an authority.
+    /// @param newVotingPower The new total voting power to add.
+    function increaseTotalVotingPower(
+        uint96 newVotingPower
+    ) external onlyAuthority onlyDelegateCall {
+        _governanceValues.totalVotingPower += newVotingPower;
+    }
+
+    /// @notice Burn a NFT and remove its voting power.
+    /// @param tokenId The ID of the NFT to burn.
+    function burn(uint256 tokenId) external onlyDelegateCall {
+        address owner = ownerOf(tokenId);
+        if (
+            msg.sender != owner &&
+            getApproved[tokenId] != msg.sender &&
+            !isApprovedForAll[owner][msg.sender]
+        ) {
+            // Allow minter to burn cards if the total voting power has not yet
+            // been set (e.g. for initial crowdfunds) meaning the party has not
+            // yet started.
+            uint96 totalVotingPower = _governanceValues.totalVotingPower;
+            if (totalVotingPower != 0 || !isAuthority[msg.sender]) {
+                revert UnauthorizedToBurnError();
+            }
+        }
+
+        uint96 votingPower = votingPowerByTokenId[tokenId].safeCastUint256ToUint96();
+        mintedVotingPower -= votingPower;
+        delete votingPowerByTokenId[tokenId];
+
+        _adjustVotingPower(owner, -votingPower.safeCastUint96ToInt192(), address(0));
+
+        _burn(tokenId);
     }
 
     /// @inheritdoc ERC721
@@ -174,9 +257,20 @@ contract PartyGovernanceNFT is PartyGovernance, ERC721, IERC2981 {
         super.safeTransferFrom(owner, to, tokenId, data);
     }
 
-    /// @notice Relinquish the ability to call `mint()` by an authority.
-    function abdicate() external onlyMinter onlyDelegateCall {
-        delete mintAuthority;
+    /// @notice Add a new authority.
+    /// @dev Used in `AddAuthorityProposal`. Only the party itself can add
+    ///      authorities to prevent it from being used anywhere else.
+    function addAuthority(address authority) external onlySelf onlyDelegateCall {
+        isAuthority[authority] = true;
+
+        emit AuthorityAdded(authority);
+    }
+
+    /// @notice Relinquish the authority role.
+    function abdicateAuthority() external onlyAuthority onlyDelegateCall {
+        delete isAuthority[msg.sender];
+
+        emit AuthorityRemoved(msg.sender);
     }
 
     function _delegateToRenderer() private view {

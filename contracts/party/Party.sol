@@ -12,6 +12,7 @@ contract Party is PartyGovernanceNFT {
     // Arguments used to initialize the party.
     struct PartyOptions {
         PartyGovernance.GovernanceOpts governance;
+        ProposalStorage.ProposalEngineOpts proposalEngine;
         string name;
         string symbol;
         uint256 customizationPresetId;
@@ -22,8 +23,11 @@ contract Party is PartyGovernanceNFT {
         PartyOptions options;
         IERC721[] preciousTokens;
         uint256[] preciousTokenIds;
-        address mintAuthority;
+        address[] authorities;
     }
+
+    /// @notice Version ID of the party implementation contract.
+    uint16 public constant VERSION_ID = 1;
 
     // Set the `Globals` contract.
     constructor(IGlobals globals) PartyGovernanceNFT(globals) {}
@@ -37,9 +41,10 @@ contract Party is PartyGovernanceNFT {
             initData.options.symbol,
             initData.options.customizationPresetId,
             initData.options.governance,
+            initData.options.proposalEngine,
             initData.preciousTokens,
             initData.preciousTokenIds,
-            initData.mintAuthority
+            initData.authorities
         );
     }
 

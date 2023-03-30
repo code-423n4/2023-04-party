@@ -11,7 +11,7 @@ import "../../contracts/proposals/ProposalExecutionEngine.sol";
 contract PartyFactoryTest is Test, TestUtils {
     Globals globals = new Globals(address(this));
     Party partyImpl = new Party(globals);
-    PartyFactory factory = new PartyFactory(globals);
+    PartyFactory factory = new PartyFactory();
     ProposalExecutionEngine eng;
     Party.PartyOptions defaultPartyOptions;
 
@@ -63,7 +63,8 @@ contract PartyFactoryTest is Test, TestUtils {
         string memory randomStr,
         uint96 randomUint96,
         uint40 randomUint40,
-        uint16 randomBps
+        uint16 randomBps,
+        bool randomBool
     ) external {
         vm.assume(randomBps <= 1e4);
 
@@ -79,14 +80,27 @@ contract PartyFactoryTest is Test, TestUtils {
                 feeBps: randomBps,
                 feeRecipient: payable(_randomAddress())
             }),
+            proposalEngine: ProposalStorage.ProposalEngineOpts({
+                enableAddAuthorityProposal: randomBool,
+                allowArbCallsToSpendPartyEth: randomBool,
+                allowOperatorsToSpendPartyEth: randomBool,
+                distributionsRequireVote: randomBool
+            }),
             name: randomStr,
             symbol: randomStr,
             customizationPresetId: 0
         });
-        Party party = factory.createParty(authority, opts, preciousTokens, preciousTokenIds);
+        Party party = factory.createParty(
+            partyImpl,
+            _toAddressArray(authority),
+            opts,
+            preciousTokens,
+            preciousTokenIds
+        );
+        assertEq(party.VERSION_ID(), 1);
         assertEq(party.name(), opts.name);
         assertEq(party.symbol(), opts.symbol);
-        assertEq(party.mintAuthority(), authority);
+        assertTrue(party.isAuthority(authority));
         PartyGovernance.GovernanceValues memory values = party.getGovernanceValues();
         assertEq(values.voteDuration, opts.governance.voteDuration);
         assertEq(values.executionDelay, opts.governance.executionDelay);
@@ -95,6 +109,11 @@ contract PartyFactoryTest is Test, TestUtils {
         assertEq(party.feeBps(), opts.governance.feeBps);
         assertEq(party.feeRecipient(), opts.governance.feeRecipient);
         assertEq(address(party.getProposalExecutionEngine()), address(eng));
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts = party
+            .getProposalEngineOpts();
+        assertEq(proposalEngineOpts.allowArbCallsToSpendPartyEth, randomBool);
+        assertEq(proposalEngineOpts.allowOperatorsToSpendPartyEth, randomBool);
+        assertEq(proposalEngineOpts.distributionsRequireVote, randomBool);
         assertEq(party.preciousListHash(), _hashPreciousList(preciousTokens, preciousTokenIds));
     }
 
@@ -115,6 +134,12 @@ contract PartyFactoryTest is Test, TestUtils {
                 feeBps > 1e4 ? feeBps : passThresholdBps
             )
         );
-        factory.createParty(authority, opts, preciousTokens, preciousTokenIds);
+        factory.createParty(
+            partyImpl,
+            _toAddressArray(authority),
+            opts,
+            preciousTokens,
+            preciousTokenIds
+        );
     }
 }

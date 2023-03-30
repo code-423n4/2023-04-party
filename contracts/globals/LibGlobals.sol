@@ -29,4 +29,7 @@ library LibGlobals {
     uint256 internal constant GLOBAL_ROLLING_AUCTION_CF_IMPL = 24;
     uint256 internal constant GLOBAL_COLLECTION_BATCH_BUY_CF_IMPL = 25;
     uint256 internal constant GLOBAL_METADATA_REGISTRY = 26;
+    uint256 internal constant GLOBAL_CROWDFUND_FACTORY = 27;
+    uint256 internal constant GLOBAL_INITIAL_ETH_CF_IMPL = 28;
+    uint256 internal constant GLOBAL_RERAISE_ETH_CF_IMPL = 29;
 }

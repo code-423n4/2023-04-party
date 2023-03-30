@@ -8,6 +8,7 @@ import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
 import "../../contracts/gatekeepers/AllowListGateKeeper.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 
 import "../DummyERC721.sol";
 import "../TestUtils.sol";
@@ -19,7 +20,7 @@ import "./MockMarketWrapper.sol";
 contract AuctionCrowdfundTest is Test, TestUtils {
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
@@ -51,7 +52,9 @@ contract AuctionCrowdfundTest is Test, TestUtils {
     address defaultInitialDelegate;
     IGateKeeper defaultGateKeeper;
     bytes12 defaultGateKeeperId;
-    Crowdfund.FixedGovernanceOpts defaultGovernanceOpts;
+
+    Crowdfund.FixedGovernanceOpts governanceOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     Globals globals = new Globals(address(this));
     MockPartyFactory partyFactory = new MockPartyFactory();
@@ -62,9 +65,16 @@ contract AuctionCrowdfundTest is Test, TestUtils {
 
     constructor() {
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         tokenToBuy = market.nftContract();
         party = partyFactory.mockParty();
         auctionCrowdfundImpl = new AuctionCrowdfund(globals);
+
+        governanceOpts.partyFactory = partyFactory;
+        governanceOpts.partyImpl = Party(payable(address(party)));
     }
 
     function _createCrowdfund(
@@ -76,7 +86,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         bytes12 gateKeeperId,
         address[] memory hosts
     ) private returns (AuctionCrowdfund cf) {
-        defaultGovernanceOpts.hosts = hosts;
+        governanceOpts.hosts = hosts;
         cf = AuctionCrowdfund(
             payable(
                 address(
@@ -103,7 +113,8 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                                 gateKeeper: gateKeeper,
                                 gateKeeperId: gateKeeperId,
                                 onlyHostCanBid: onlyHostCanBid,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: governanceOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -125,27 +136,29 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 false,
                 defaultGateKeeper,
                 defaultGateKeeperId,
-                defaultGovernanceOpts.hosts
+                governanceOpts.hosts
             );
     }
 
     function _createExpectedPartyOptions(
         uint256 finalPrice
     ) private view returns (Party.PartyOptions memory opts) {
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts;
         return
             Party.PartyOptions({
                 name: defaultName,
                 symbol: defaultSymbol,
                 customizationPresetId: 0,
                 governance: PartyGovernance.GovernanceOpts({
-                    hosts: defaultGovernanceOpts.hosts,
-                    voteDuration: defaultGovernanceOpts.voteDuration,
-                    executionDelay: defaultGovernanceOpts.executionDelay,
-                    passThresholdBps: defaultGovernanceOpts.passThresholdBps,
+                    hosts: governanceOpts.hosts,
+                    voteDuration: governanceOpts.voteDuration,
+                    executionDelay: governanceOpts.executionDelay,
+                    passThresholdBps: governanceOpts.passThresholdBps,
                     totalVotingPower: uint96(finalPrice),
-                    feeBps: defaultGovernanceOpts.feeBps,
-                    feeRecipient: defaultGovernanceOpts.feeRecipient
-                })
+                    feeBps: governanceOpts.feeBps,
+                    feeRecipient: governanceOpts.feeRecipient
+                }),
+                proposalEngine: proposalEngineOpts
             });
     }
 
@@ -161,7 +174,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         // Bid on the auction.
         _expectEmit0();
         emit MockMarketWrapperBid(address(cf), auctionId, 1337);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // End the auction.
         _expectEmit0();
         emit MockMarketWrapperFinalize(address(cf), address(cf), 1337);
@@ -170,12 +183,12 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         _expectEmit0();
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(1337),
             _toERC721Array(tokenToBuy),
             _toUint256Array(tokenId)
         );
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(party));
         // Burn contributor's NFT, mock minting governance tokens and returning
         // unused contribution.
@@ -207,9 +220,9 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         // Expect revert if not host.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
         vm.prank(_randomAddress());
-        cf.bid(1e18, defaultGovernanceOpts, 0);
+        cf.bid(1e18, governanceOpts, proposalEngineOpts, 0);
         // Bid on the auction with a custom amount as host.
-        cf.bid(1e18, defaultGovernanceOpts, 0);
+        cf.bid(1e18, governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_cannotReinitialize() external {
@@ -231,7 +244,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         market.endAuction(auctionId);
         // Expire and finalize the crowdfund.
         skip(defaultDuration);
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(0));
         // Burn contributor's NFT, which should refund all contributed ETH.
         _expectEmit0();
@@ -249,14 +262,14 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Outbid externally so we're losing.
         _outbidExternally(auctionId);
         // End the auction.
         market.endAuction(auctionId);
         // Expire and finalize the crowdfund.
         skip(defaultDuration);
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(0));
         // Burn contributor's NFT, which should refund all contributed ETH.
         _expectEmit0();
@@ -274,7 +287,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Outbid externally so we're losing.
         _outbidExternally(auctionId);
         // End the auction and finalize it.
@@ -282,7 +295,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         market.finalize(auctionId);
         // Expire and finalize the crowdfund.
         skip(defaultDuration);
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(0));
         // Burn contributor's NFT, which should refund all contributed ETH.
         _expectEmit0();
@@ -300,14 +313,14 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Expire and finalize the crowdfund.
         skip(defaultDuration);
         assertEq(uint8(cf.getCrowdfundLifecycle()), uint8(Crowdfund.CrowdfundLifecycle.Expired));
         // End the auction.
         market.endAuction(auctionId);
         // Finalize the crowdfund.
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(party));
         // Burn contributor's NFT, which should refund unused ETH and mint voting power.
         _expectEmit0();
@@ -325,11 +338,11 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // End the auction.
         market.endAuction(auctionId);
         // Finalize the crowdfund.
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(party));
         // Try to bid with the crowdfund again.
         vm.expectRevert(
@@ -338,7 +351,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Won
             )
         );
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_cannotFinalizeTwice() external {
@@ -350,11 +363,11 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // End the auction.
         market.endAuction(auctionId);
         // Finalize the crowdfund.
-        Party party_ = cf.finalize(defaultGovernanceOpts);
+        Party party_ = cf.finalize(governanceOpts, proposalEngineOpts);
         assertEq(address(party_), address(party));
         // Try to finalize the crowdfund again.
         vm.expectRevert(
@@ -363,7 +376,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Won
             )
         );
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_cannotFinalizeTooEarlyWithNoBids() external {
@@ -376,7 +389,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         _contribute(cf, contributor, 1e18);
         // Finalize the crowdfund early.
         vm.expectRevert("AUCTION_NOT_ENDED");
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_canFinalizeIfExpiredBeforeAuctionEnds_noBids() external {
@@ -391,7 +404,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         // Finalize the crowdfund.
         _expectEmit0();
         emit Lost();
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_canFinalizeIfExpiredAfterAuctionEnds_noBids() external {
@@ -407,7 +420,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         _expectEmit0();
         emit Lost();
         // Finalize the crowdfund.
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_canFinalizeIfExpiredAndAuctionFinalized_noBids() external {
@@ -424,7 +437,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         _expectEmit0();
         emit Lost();
         // Finalize the crowdfund.
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_cannotFinalizeIfExpiredBeforeAuctionEndsIfHighestBidder() external {
@@ -436,7 +449,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Place a bid.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Expire the CF.
         skip(defaultDuration);
         // Check that the CF is highest bidder.
@@ -445,7 +458,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Expired);
         // Finalize the crowdfund.
         vm.expectRevert("AUCTION_NOT_ENDED");
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_canFinalizeIfExpiredBeforeAuctionEndsIfNotHighestBidder() external {
@@ -457,7 +470,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Place a bid.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Get outbid.
         _outbidExternally(auctionId);
         // Expire the CF.
@@ -467,7 +480,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         // Check that the CF is expired.
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Expired);
         // Finalize the crowdfund.
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Lost);
     }
 
@@ -481,14 +494,14 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         _contribute(cf, contributor, 1e18);
         uint256 bid = market.getMinimumBid(auctionId);
         // Place a bid.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // Expire the CF.
         skip(defaultDuration);
         // End the auction.
         market.endAuction(auctionId);
         _expectEmit0();
         emit Won(bid, Party(payable(address(party))));
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_canFinalizeIfExpiredAndNeverBid() external {
@@ -504,7 +517,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         skip(defaultDuration);
         _expectEmit0();
         emit Lost();
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_cannotReenterFinalize() external {
@@ -516,11 +529,15 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // End the auction.
         market.endAuction(auctionId);
         // Set up a callback to reenter finalize().
-        market.setCallback(address(cf), abi.encodeCall(cf.finalize, defaultGovernanceOpts), 0);
+        market.setCallback(
+            address(cf),
+            abi.encodeCall(cf.finalize, (governanceOpts, proposalEngineOpts)),
+            0
+        );
         // Finalize the crowdfund.
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -528,7 +545,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Busy
             )
         );
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_cannotReenterBid() external {
@@ -548,7 +565,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Busy
             )
         );
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_cannotReenterContributeThroughBid() external {
@@ -568,7 +585,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Busy
             )
         );
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_cannotReenterContributeThroughFinalize() external {
@@ -580,7 +597,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         address payable contributor = _randomAddress();
         _contribute(cf, contributor, 1e18);
         // Bid on the auction.
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
         // End the auction.
         market.endAuction(auctionId);
         // Set up a callback to reenter contribute().
@@ -592,7 +609,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                 Crowdfund.CrowdfundLifecycle.Busy
             )
         );
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_onlyHostCanBid() public {
@@ -621,12 +638,12 @@ contract AuctionCrowdfundTest is Test, TestUtils {
 
         // Bid, expect revert because we are not a host.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as a contributor, but expect a revert because they are not a host.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
         vm.prank(contributor);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as the host, but expect a revert because the CF is expired.
         vm.expectRevert(
@@ -636,7 +653,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
             )
         );
         vm.prank(host);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_onlyHostCanBidWithGatekeeperSet() public {
@@ -668,12 +685,12 @@ contract AuctionCrowdfundTest is Test, TestUtils {
 
         // Bid, expect revert because we are not a host or contributor.
         vm.expectRevert(Crowdfund.OnlyPartyHostError.selector);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as a contributor, but expect a revert because onlyHost is on.
         vm.expectRevert(abi.encodeWithSelector(Crowdfund.OnlyPartyHostError.selector));
         vm.prank(contributor);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as the host, but expect a revert because the CF is expired.
         vm.expectRevert(
@@ -683,7 +700,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
             )
         );
         vm.prank(host);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_onlyContributorCanBid() public {
@@ -715,7 +732,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
 
         // Bid, expect revert because we are not a contributor.
         vm.expectRevert(Crowdfund.OnlyContributorError.selector);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as a contributor, but expect a revert because the CF is expired.
         vm.expectRevert(
@@ -725,12 +742,12 @@ contract AuctionCrowdfundTest is Test, TestUtils {
             )
         );
         vm.prank(contributor);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
 
         // Bid as the host, but expect a revert because the host is not a contributor.
         vm.expectRevert(Crowdfund.OnlyContributorError.selector);
         vm.prank(host);
-        cf.bid(defaultGovernanceOpts, 0);
+        cf.bid(governanceOpts, proposalEngineOpts, 0);
     }
 
     function test_gettingNFTForFreeTriggersLostToRefund() public {
@@ -755,7 +772,7 @@ contract AuctionCrowdfundTest is Test, TestUtils {
         // Finalize the crowdfund.
         _expectEmit0();
         emit Lost();
-        cf.finalize(defaultGovernanceOpts);
+        cf.finalize(governanceOpts, proposalEngineOpts);
     }
 
     function test_creation_initialContribution() external {
@@ -797,7 +814,8 @@ contract AuctionCrowdfundTest is Test, TestUtils {
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
                                 onlyHostCanBid: false,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: governanceOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )

@@ -4,6 +4,7 @@ pragma solidity ^0.8;
 import "forge-std/Test.sol";
 
 import "../../contracts/crowdfund/CollectionBuyCrowdfund.sol";
+import "../../contracts/renderers/RendererStorage.sol";
 import "../../contracts/globals/Globals.sol";
 import "../../contracts/globals/LibGlobals.sol";
 import "../../contracts/utils/Proxy.sol";
@@ -18,7 +19,7 @@ import "./TestERC721Vault.sol";
 contract CollectionBuyCrowdfundTest is Test, TestUtils {
     event MockPartyFactoryCreateParty(
         address caller,
-        address authority,
+        address[] authorities,
         Party.PartyOptions opts,
         IERC721[] preciousTokens,
         uint256[] preciousTokenIds
@@ -43,7 +44,8 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
     address defaultInitialDelegate;
     IGateKeeper defaultGateKeeper;
     bytes12 defaultGateKeeperId;
-    Crowdfund.FixedGovernanceOpts defaultGovernanceOpts;
+    Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     Globals globals = new Globals(address(this));
     MockPartyFactory partyFactory = new MockPartyFactory();
@@ -53,8 +55,15 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
 
     constructor() {
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         party = partyFactory.mockParty();
         collectionBuyCrowdfundImpl = new CollectionBuyCrowdfund(globals);
+
+        govOpts.partyImpl = Party(payable(address(party)));
+        govOpts.partyFactory = partyFactory;
     }
 
     function _createCrowdfund(
@@ -64,6 +73,8 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
         private
         returns (CollectionBuyCrowdfund cf, Crowdfund.FixedGovernanceOpts memory governanceOpts)
     {
+        governanceOpts.partyImpl = govOpts.partyImpl;
+        governanceOpts.partyFactory = govOpts.partyFactory;
         governanceOpts.hosts = hosts;
 
         cf = CollectionBuyCrowdfund(
@@ -88,7 +99,8 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
-                                governanceOpts: governanceOpts
+                                governanceOpts: governanceOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )
@@ -108,13 +120,14 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
                 customizationPresetId: 0,
                 governance: PartyGovernance.GovernanceOpts({
                     hosts: hosts,
-                    voteDuration: defaultGovernanceOpts.voteDuration,
-                    executionDelay: defaultGovernanceOpts.executionDelay,
-                    passThresholdBps: defaultGovernanceOpts.passThresholdBps,
+                    voteDuration: govOpts.voteDuration,
+                    executionDelay: govOpts.executionDelay,
+                    passThresholdBps: govOpts.passThresholdBps,
                     totalVotingPower: uint96(finalPrice),
-                    feeBps: defaultGovernanceOpts.feeBps,
-                    feeRecipient: defaultGovernanceOpts.feeRecipient
-                })
+                    feeBps: govOpts.feeBps,
+                    feeRecipient: govOpts.feeRecipient
+                }),
+                proposalEngine: proposalEngineOpts
             });
     }
 
@@ -136,7 +149,7 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
         vm.expectEmit(false, false, false, true);
         emit MockPartyFactoryCreateParty(
             address(cf),
-            address(cf),
+            _toAddressArray(address(cf)),
             _createExpectedPartyOptions(_toAddressArray(host), 0.5e18),
             _toERC721Array(erc721Vault.token()),
             _toUint256Array(tokenId)
@@ -148,6 +161,7 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
             0.5e18,
             abi.encodeCall(erc721Vault.claim, (tokenId)),
             governanceOpts,
+            proposalEngineOpts,
             0
         );
         assertEq(address(party), address(party_));
@@ -182,6 +196,7 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
             0.5e18,
             abi.encodeCall(erc721Vault.claim, (tokenId)),
             governanceOpts,
+            proposalEngineOpts,
             0
         );
     }
@@ -216,6 +231,7 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
             0.5e18,
             "",
             governanceOpts,
+            proposalEngineOpts,
             0
         );
         assertTrue(cf.getCrowdfundLifecycle() == Crowdfund.CrowdfundLifecycle.Active);
@@ -232,7 +248,7 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
         uint256 initialContribution = _randomRange(1, 1 ether);
         address initialContributor = _randomAddress();
         address initialDelegate = _randomAddress();
-        defaultGovernanceOpts.hosts = _toAddressArray(_randomAddress());
+        govOpts.hosts = _toAddressArray(_randomAddress());
         vm.deal(address(this), initialContribution);
         _expectEmit0();
         emit Contributed(
@@ -264,7 +280,8 @@ contract CollectionBuyCrowdfundTest is Test, TestUtils {
                                 maxContribution: type(uint96).max,
                                 gateKeeper: defaultGateKeeper,
                                 gateKeeperId: defaultGateKeeperId,
-                                governanceOpts: defaultGovernanceOpts
+                                governanceOpts: govOpts,
+                                proposalEngineOpts: proposalEngineOpts
                             })
                         )
                     )

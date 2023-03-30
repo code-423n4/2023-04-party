@@ -2,6 +2,7 @@
 pragma solidity ^0.8;
 
 import "contracts/crowdfund/RollingAuctionCrowdfund.sol";
+import "contracts/renderers/RendererStorage.sol";
 import "contracts/globals/Globals.sol";
 import "contracts/utils/Proxy.sol";
 import "contracts/tokens/ERC721Receiver.sol";
@@ -27,6 +28,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
     uint256 auctionId;
 
     Crowdfund.FixedGovernanceOpts govOpts;
+    ProposalStorage.ProposalEngineOpts proposalEngineOpts;
 
     // This is for other test inheriting from this test; this can be ignored for
     // this file as it will always be false.
@@ -40,6 +42,10 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
     function setUp() public virtual onlyForkedIfSet {
         // Setup state
         globals = new Globals(address(this));
+        globals.setAddress(
+            LibGlobals.GLOBAL_RENDERER_STORAGE,
+            address(new RendererStorage(address(this)))
+        );
         partyFactory = new MockPartyFactory();
         globals.setAddress(LibGlobals.GLOBAL_PARTY_FACTORY, address(partyFactory));
         rollingAuctionCrowdfundImpl = new RollingAuctionCrowdfund(globals);
@@ -49,6 +55,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
 
         // Set host
         govOpts.hosts = _toAddressArray(address(this));
+        govOpts.partyFactory = partyFactory;
     }
 
     function _createCrowdfund() internal {
@@ -64,28 +71,31 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
                         rollingAuctionCrowdfundImpl,
                         abi.encodeCall(
                             RollingAuctionCrowdfund.initialize,
-                            RollingAuctionCrowdfund.RollingAuctionCrowdfundOptions({
-                                name: "Crowfund",
-                                symbol: "CF",
-                                customizationPresetId: 0,
-                                auctionId: auctionId,
-                                market: market,
-                                nftContract: nftContract,
-                                nftTokenId: tokenId,
-                                duration: 2 days,
-                                maximumBid: type(uint96).max,
-                                splitRecipient: payable(address(0)),
-                                splitBps: 0,
-                                initialContributor: address(this),
-                                initialDelegate: address(this),
-                                minContribution: 0,
-                                maxContribution: type(uint96).max,
-                                gateKeeper: IGateKeeper(address(0)),
-                                gateKeeperId: 0,
-                                onlyHostCanBid: false,
-                                allowedAuctionsMerkleRoot: allowedAuctionsMerkleRoot,
-                                governanceOpts: govOpts
-                            })
+                            (
+                                AuctionCrowdfundBase.AuctionCrowdfundOptions({
+                                    name: "Crowfund",
+                                    symbol: "CF",
+                                    customizationPresetId: 0,
+                                    auctionId: auctionId,
+                                    market: market,
+                                    nftContract: nftContract,
+                                    nftTokenId: tokenId,
+                                    duration: 2 days,
+                                    maximumBid: type(uint96).max,
+                                    splitRecipient: payable(address(0)),
+                                    splitBps: 0,
+                                    initialContributor: address(this),
+                                    initialDelegate: address(this),
+                                    minContribution: 0,
+                                    maxContribution: type(uint96).max,
+                                    gateKeeper: IGateKeeper(address(0)),
+                                    gateKeeperId: 0,
+                                    onlyHostCanBid: false,
+                                    governanceOpts: govOpts,
+                                    proposalEngineOpts: proposalEngineOpts
+                                }),
+                                allowedAuctionsMerkleRoot
+                            )
                         )
                     )
                 )
@@ -103,7 +113,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund(keccak256(abi.encodePacked(bytes32(0), nextAuctionId, nextTokenId)));
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _outbid();
 
@@ -115,12 +125,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         // Anyone can call rolling over to next auction as long as it's allowed.
         vm.prank(_randomAddress());
         crowdfund.finalizeOrRollOver(
-            nextTokenId,
-            nextAuctionId,
-            1 ether,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: nextTokenId,
+                nextAuctionId: nextAuctionId,
+                nextMaximumBid: 1 ether,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
         assertEq(crowdfund.auctionId(), nextAuctionId);
         assertEq(crowdfund.nftTokenId(), nextTokenId);
@@ -132,7 +145,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund();
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _outbid();
 
@@ -145,7 +158,17 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _expectEmit0();
         emit AuctionUpdated(tokenId, auctionId, 1 ether);
         // Only host can call rolling over to next auction.
-        crowdfund.finalizeOrRollOver(tokenId, auctionId, 1 ether, new bytes32[](0), govOpts, 0);
+        crowdfund.finalizeOrRollOver(
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: 1 ether,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
+            govOpts,
+            proposalEngineOpts
+        );
         assertEq(crowdfund.auctionId(), auctionId);
         assertEq(crowdfund.nftTokenId(), tokenId);
         assertEq(crowdfund.maximumBid(), 1 ether);
@@ -156,7 +179,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         test_finalizeLoss_rollOverToNextAuction_hostChoosesAny();
 
         // Bid on the new auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _endAuction();
 
@@ -164,12 +187,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _expectEmit0();
         emit Won(crowdfund.lastBid(), Party(payable(address(partyFactory.mockParty()))));
         Party party = crowdfund.finalizeOrRollOver(
-            tokenId,
-            auctionId,
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
         assertEq(address(nftContract.ownerOf(tokenId)), address(party));
         assertEq(address(crowdfund.party()), address(partyFactory.mockParty()));
@@ -182,7 +208,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund();
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _outbid();
 
@@ -202,12 +228,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
             )
         );
         crowdfund.finalizeOrRollOver(
-            tokenId,
-            auctionId,
-            uint96(nextMaximumBid),
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: uint96(nextMaximumBid),
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
     }
 
@@ -215,7 +244,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund();
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _outbid();
 
@@ -226,12 +255,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
             abi.encodeWithSelector(AuctionCrowdfundBase.InvalidAuctionIdError.selector)
         );
         crowdfund.finalizeOrRollOver(
-            tokenId,
-            auctionId,
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
     }
 
@@ -239,7 +271,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund(_randomBytes32());
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _outbid();
 
@@ -250,12 +282,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
             abi.encodeWithSelector(RollingAuctionCrowdfund.BadNextAuctionError.selector)
         );
         crowdfund.finalizeOrRollOver(
-            _randomUint256(),
-            _randomUint256(),
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: _randomUint256(),
+                nextAuctionId: _randomUint256(),
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
     }
 
@@ -270,12 +305,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         emit Lost();
         vm.prank(_randomAddress());
         crowdfund.finalizeOrRollOver(
-            tokenId,
-            auctionId,
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
         assertEq(address(crowdfund.party()), address(0));
     }
@@ -284,7 +322,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund();
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _endAuction();
 
@@ -292,12 +330,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _expectEmit0();
         emit Won(crowdfund.lastBid(), Party(payable(address(partyFactory.mockParty()))));
         Party party = crowdfund.finalizeOrRollOver(
-            _randomUint256(),
-            _randomUint256(),
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: _randomUint256(),
+                nextAuctionId: _randomUint256(),
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
         assertEq(address(nftContract.ownerOf(tokenId)), address(party));
         assertEq(address(crowdfund.party()), address(partyFactory.mockParty()));
@@ -307,7 +348,7 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         _createCrowdfund();
 
         // Bid on the auction
-        crowdfund.bid(govOpts, 0);
+        crowdfund.bid(govOpts, proposalEngineOpts, 0);
 
         _endAuction();
 
@@ -317,12 +358,15 @@ contract RollingAuctionCrowdfundTest is TestUtils, ERC721Receiver {
         emit Won(crowdfund.lastBid(), Party(payable(address(partyFactory.mockParty()))));
         vm.prank(_randomAddress());
         crowdfund.finalizeOrRollOver(
-            tokenId,
-            auctionId,
-            type(uint96).max,
-            new bytes32[](0),
+            RollingAuctionCrowdfund.RollOverArgs({
+                nextNftTokenId: tokenId,
+                nextAuctionId: auctionId,
+                nextMaximumBid: type(uint96).max,
+                proof: new bytes32[](0),
+                hostIndex: 0
+            }),
             govOpts,
-            0
+            proposalEngineOpts
         );
         assertEq(address(crowdfund.party()), address(partyFactory.mockParty()));
     }

@@ -17,6 +17,7 @@ import "../TestUsers.sol";
 import "../TestUtils.sol";
 
 contract PartyGovernanceHelpersTest is Test, TestUtils {
+    Party partyImpl;
     PartyFactory partyFactory;
     DummySimpleProposalEngineImpl eng;
     PartyNFTRenderer nftRenderer;
@@ -31,7 +32,7 @@ contract PartyGovernanceHelpersTest is Test, TestUtils {
     function setUp() public {
         GlobalsAdmin globalsAdmin = new GlobalsAdmin();
         Globals globals = globalsAdmin.globals();
-        Party partyImpl = new Party(globals);
+        partyImpl = new Party(globals);
         globalsAdmin.setPartyImpl(address(partyImpl));
         globalsAdmin.setGlobalDaoWallet(globalDaoWalletAddress);
 
@@ -41,7 +42,7 @@ contract PartyGovernanceHelpersTest is Test, TestUtils {
         nftRenderer = new PartyNFTRenderer(globals, RendererStorage(address(0)), IFont(address(0)));
         globalsAdmin.setGovernanceNftRendererAddress(address(nftRenderer));
 
-        partyFactory = new PartyFactory(globals);
+        partyFactory = new PartyFactory();
 
         john = new PartyParticipant();
         steve = new PartyParticipant();
@@ -62,6 +63,7 @@ contract PartyGovernanceHelpersTest is Test, TestUtils {
     function testGetCurrDelegates() public {
         // Create party
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -107,6 +109,7 @@ contract PartyGovernanceHelpersTest is Test, TestUtils {
     function testGetVotingPowersAt() public {
         // Create party
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),
@@ -158,6 +161,7 @@ contract PartyGovernanceHelpersTest is Test, TestUtils {
     function testGetNftInfos() public {
         // Create party
         (Party party, , ) = partyAdmin.createParty(
+            partyImpl,
             PartyAdmin.PartyCreationMinimalOptions({
                 host1: address(this),
                 host2: address(0),

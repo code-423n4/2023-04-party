@@ -50,10 +50,6 @@ contract GlobalsAdmin is Test {
     function setRendererStorage(address rendererStorage) public {
         globals.setAddress(LibGlobals.GLOBAL_RENDERER_STORAGE, rendererStorage);
     }
-
-    function setMetadataRegistry(address metadataRegistry) public {
-        globals.setAddress(LibGlobals.GLOBAL_METADATA_REGISTRY, metadataRegistry);
-    }
 }
 
 contract PartyAdmin is Test {
@@ -79,6 +75,7 @@ contract PartyAdmin is Test {
     }
 
     function createParty(
+        Party partyImpl,
         PartyCreationMinimalOptions calldata opts
     ) public returns (Party, IERC721[] memory, uint256[] memory) {
         address[] memory hosts = new address[](2);
@@ -94,8 +91,11 @@ contract PartyAdmin is Test {
             feeRecipient: opts.feeRecipient,
             feeBps: opts.feeBps
         });
+        ProposalStorage.ProposalEngineOpts memory proposalEngineOpts;
+
         Party.PartyOptions memory po = Party.PartyOptions({
             governance: govOpts,
+            proposalEngine: proposalEngineOpts,
             name: "Dope party",
             symbol: "DOPE",
             customizationPresetId: 0
@@ -106,8 +106,12 @@ contract PartyAdmin is Test {
         uint256[] memory preciousTokenIds = new uint256[](1);
         preciousTokenIds[0] = opts.preciousTokenId;
 
+        address[] memory authorities = new address[](1);
+        authorities[0] = address(this);
+
         Party party = _partyFactory.createParty(
-            address(this),
+            partyImpl,
+            authorities,
             po,
             preciousTokens,
             preciousTokenIds
@@ -186,6 +190,7 @@ contract PartyParticipant is ERC721Holder, Test {
     ) public returns (ITokenDistributor.DistributionInfo memory distInfo) {
         return
             party.distribute(
+                address(party).balance,
                 ITokenDistributor.TokenType.Native,
                 address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE),
                 0
