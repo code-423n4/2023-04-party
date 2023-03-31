@@ -36,7 +36,7 @@ Additional key new feature and updates include:
 
 ## Documentation
 
-For more information on Party Protocol, see the documentation [here](https://github.com/code-423n4/2022-09-party/tree/main/docs).
+For more information on Party Protocol, see the documentation [here](https://github.com/code-423n4/2023-04-party/tree/main/docs).
 
 - [Overview](https://github.com/code-423n4/2023-04-party/blob/main/docs/README.md)
 - [Crowdfund](https://github.com/code-423n4/2023-04-party/blob/main/docs/crowdfund.md)
