@@ -1,4 +1,4 @@
-# Party DAO
+# Party Protocol - Versus contest
 
 ## Contest Details
 
@@ -9,7 +9,7 @@
   - Judge awards: $12,000 USDC
   - Scout awards: $500 USDC
 - Join [C4 Discord](https://discord.gg/code4rena) to register
-- Submit findings [using the C4 form](https://code4rena.com/contests/2023-04-party-contest/submit)
+- Submit findings [using the C4 form](https://code4rena.com/contests/2023-04-party-protocol-versus-contest/submit)
 - [Read our guidelines for more details](https://docs.code4rena.com/roles/wardens)
 - Starts April 3, 2023 20:00 UTC
 - Ends April 14, 2023 20:00 UTC
