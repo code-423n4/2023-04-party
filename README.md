@@ -14,6 +14,12 @@
 - Starts April 3, 2023 20:00 UTC
 - Ends April 14, 2023 20:00 UTC
 
+## Automated Findings / Publicly Known Issues
+
+Automated findings output for the contest can be found [here](https://gist.github.com/HollaDieWaldfee100/673ab665890ab92d5f3f82c8736ffea5) within an hour of contest opening.
+
+*Note for C4 wardens: Anything included in the automated findings output is considered a publicly known issue and is ineligible for awards.*
+
 ## Overview
 
 Party Protocol aims to be a standard for group coordination, providing on-chain functionality for essential group behaviors:
